@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LUMENWARDEN — Keep the Last Lantern Burning</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05070f;
+    display: flex; align-items: center; justify-content: center;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  #wrap { position: relative; width: min(100vw, 160vh); max-width: 1280px; }
+  canvas {
+    display: block; width: 100%; height: auto;
+    background: #05070f;
+    box-shadow: 0 0 80px rgba(255, 179, 71, 0.12), 0 0 0 1px #1c2547;
+    cursor: crosshair;
+  }
+  #selftest {
+    position: absolute; left: -9999px; top: -9999px;
+    width: 1px; height: 1px; overflow: hidden;
+  }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="1280" height="800"></canvas>
+    <div id="selftest"></div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
