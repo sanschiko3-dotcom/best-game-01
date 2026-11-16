@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — audio.js
 // One job: every sound in the game, synthesised with WebAudio.
 // No audio files, no network: oscillators and noise buffers only.
@@ -89,6 +90,17 @@ export const sfx = {
   pickup() { tone(660, 0.09, 'sine', 0.14, 990); },
   hurt() { tone(160, 0.25, 'sawtooth', 0.2, 60); noise(0.2, 0.12, 500); },
   brazier() { tone(330, 0.4, 'sine', 0.16, 660); tone(495, 0.5, 'sine', 0.1, 990, 0.08); },
+  // A beacon kindling is the brightest sound in the game: a rising
+  // three-note chime, one note per third of the channel, so the player
+  // hears the light arrive.
+  beaconChime() { [880, 1108, 1318].forEach((f, i) => tone(f, 0.4, 'sine', 0.14, null, i * 0.09)); },
+  // The Hollow King does not roar like the others: a low sawtooth
+  // groan under a wash of noise, as if the dark itself cleared its
+  // throat.
+  hollowRoar() { tone(65, 1.1, 'sawtooth', 0.25, 32); noise(1.0, 0.16, 240); tone(98, 0.9, 'sawtooth', 0.18, 49, 0.1); },
+  // A brazier levelling up rings a short major triad — a small
+  // celebration for a permanent improvement.
+  brazierUpgrade() { [523, 659, 784].forEach((f, i) => tone(f, 0.18, 'triangle', 0.14, null, i * 0.07)); },
   waveHorn() { tone(196, 0.7, 'triangle', 0.2, 196); tone(294, 0.7, 'triangle', 0.14, 294, 0.05); },
   bossRoar() { tone(98, 0.9, 'sawtooth', 0.22, 49); noise(0.8, 0.14, 300); },
   upgrade() { tone(523, 0.12, 'sine', 0.14); tone(659, 0.12, 'sine', 0.14, null, 0.1); tone(784, 0.22, 'sine', 0.16, null, 0.2); },

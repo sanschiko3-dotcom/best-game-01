@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — upgrades.js
 // One job: the three-choice reward offered after every cleared wave.
 // Each upgrade is one clear decision (more light, more damage, more

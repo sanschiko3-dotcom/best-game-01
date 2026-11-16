@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — random.js
 // One job: a small seeded random number generator and its helpers.
 // Seeded so screenshot states and self-tests reproduce exactly; the

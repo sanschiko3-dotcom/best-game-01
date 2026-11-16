@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — shots.js
 // One job: the deterministic demo states behind ?shot=….
 // Each state is built only from the game's own systems (startRun,

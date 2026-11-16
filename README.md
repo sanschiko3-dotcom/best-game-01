@@ -2,11 +2,21 @@
 [![rank](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-# LUMENWARDEN v2 — Make the best game (best-game-01)
+# LUMENWARDEN v3 — Make the best game (best-game-01)
 
 **Keep the last lantern burning through the Long Night.**
 
-An arena survival campaign across three nights, each with five waves and a boss. Light burns enemies, fuel sustains the lantern, and collected embers fund permanent upgrades at dawn. Survive the Gloam Queen to unlock endless play.
+An arena survival campaign across three nights, each with five waves and a boss. Light burns enemies, fuel sustains the lantern, and collected embers fund permanent upgrades at dawn. Survive the Gloam Queen to unlock endless play — and past the dawn, the Hollow Dawn answers.
+
+## v3 — The Hollow Dawn
+
+- **Night 4: The Hollow Dawn.** Survive all three nights and the campaign continues into a fourth night under a pale hollow moon: drifting hollow-fog banks, moving hollow zones that drain lantern fuel, and a violet palette all its own. After night 4, the Endless Night deepens every six waves.
+- **Beacon puzzle.** Night 4 raises three unlit beacons. Stand inside one with fuel to kindle it over two seconds. Each lit beacon is +25% brazier damage and −10% Hollow King health — light three and the crown breaks much easier.
+- **Placeable braziers, three kinds, three levels.** The Dawn Shop now sells braziers by kind: Ember (steady burn, 8e), Frost (chills shadows to half speed, 12e), Sun (fierce burn, wide light, 16e). Buying a kind again raises it to level 3 — wider radius, stronger burn, deeper chill — with level pips drawn under each brazier in the arena. `U` upgrades the last kind placed.
+- **Ember Vault (meta-progression).** Embers left at the end of a run are banked into a persistent Vault (localStorage). Spend them on the title screen (keys 1–4) for permanent upgrades: +15 max HP, +10% flare damage, −8% dash cooldown, and a fifth brazier socket.
+- **New enemies + boss.** Mirror Wraiths reflect flare bolts back at the Warden (once per 1.2s each), Lantern Thieves hunt lit braziers and douse them, and Hollow Wisps swarm the endless deep in growing numbers. Night 4's boss is the Hollow King, with a faster phase-2 enrage that summons mirrors and thieves.
+- **Juice.** Brazier flames grow with level, Frost braziers shed snow motes, Sun braziers throw rotating rays, hollow zones pulse violet, the hollow moon is cratered, and new sounds mark a beacon lit, a brazier upgraded, and the Hollow King's roar.
+- **Run report.** The end screen now lists nights survived, beacons lit, braziers placed, embers banked, best endless wave, and flares fired — and the best endless wave persists between runs.
 
 ## How to play
 
@@ -115,3 +125,13 @@ percent more flare damage until the kill combo expires.
 
 The ten-item shop includes true piercing Sunlance, a fifth central brazier,
 a once-per-night Second Wind revival, and Frost Lantern's slowing light.
+# v3 — The Hollow Dawn
+
+- Night 4 introduces drifting hollow fog, a pale moon and moving fuel-draining ground.
+- Endless nights bring scaling enemies and growing Hollow Wisp swarms.
+- Channel three beacons to empower braziers and weaken the Hollow King.
+- Upgrade Ember, Frost and Sun braziers through three levels.
+- Bank embers in the permanent Ember Vault between runs.
+- Mirror Wraiths reflect flares; Lantern Thieves douse defensive flames.
+- Face the Hollow King and track your best endless wave.
+

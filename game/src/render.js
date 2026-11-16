@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — render.js
 // One job: everything the player sees, drawn on one canvas.
 // The signature look is darkness with light: the world is drawn
@@ -6,8 +7,10 @@
 // light itself is the picture. HUD and menus draw on top, unlit.
 
 import { DARK_ZONES, effectiveRadius } from './entities.js';
+import { drawHollow, litBeacons } from './hollow.js';
 import { drawShop } from './shop.js';
-import { VIEW, PALETTE, PLAYER, WAVES_TOTAL } from './config.js';
+import { VIEW, PALETTE, PLAYER, WAVES_TOTAL, themeForNight } from './config.js';
+import { waveTitle } from './waves.js';
 
 let darkCanvas = null;
 let darkCtx = null;
@@ -57,9 +60,16 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function drawBackground(ctx, state, t) {
+  // One night, one palette: the theme for the current night paints the
+  // sky, the ground and the moon. Nights 1-3 are the exact v2 colours;
+  // the Hollow Dawn (night 4) goes pale violet, and the endless deep
+  // (night 5+) darker still. The moon grows hollow craters once the
+  // Hollow Dawn rises, so the sky itself tells the player how deep the
+  // run has gone.
+  const theme = themeForNight(state.night);
   const g = ctx.createLinearGradient(0, 0, 0, VIEW.h);
-  g.addColorStop(0, PALETTE.nightTop);
-  g.addColorStop(1, PALETTE.nightBottom);
+  g.addColorStop(0, theme.skyTop);
+  g.addColorStop(1, theme.skyBottom);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, VIEW.w, VIEW.h);
 
@@ -76,21 +86,31 @@ function drawBackground(ctx, state, t) {
 
   // A low pale moon, the only cold light in the sky.
   const mg = ctx.createRadialGradient(1120, 92, 8, 1120, 92, 120);
-  mg.addColorStop(0, 'rgba(232,236,255,0.5)');
+  mg.addColorStop(0, theme.moonGlow);
   mg.addColorStop(1, 'rgba(232,236,255,0)');
   ctx.fillStyle = mg;
   ctx.beginPath(); ctx.arc(1120, 92, 120, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = PALETTE.moon;
+  ctx.fillStyle = theme.moon;
   ctx.beginPath(); ctx.arc(1120, 92, 34, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(160,170,220,0.5)';
   ctx.beginPath(); ctx.arc(1108, 84, 7, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(1132, 100, 5, 0, Math.PI * 2); ctx.fill();
+  if (state.hollowMoon) {
+    // The hollow moon is pocked: two more craters, darker, and a faint
+    // violet ring, as if something had taken bites out of the light.
+    ctx.fillStyle = 'rgba(120,90,160,0.55)';
+    ctx.beginPath(); ctx.arc(1116, 104, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(1130, 82, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(216,170,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(1120, 92, 40, 0, Math.PI * 2); ctx.stroke();
+  }
 
   // Ground: dark field with faint stones and tufts, and a worn ring
   // where the Warden stands guard.
-  ctx.fillStyle = PALETTE.ground;
+  ctx.fillStyle = theme.ground;
   ctx.fillRect(0, VIEW.h - 190, VIEW.w, 190);
-  ctx.strokeStyle = PALETTE.groundLine;
+  ctx.strokeStyle = theme.groundLine;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, VIEW.h - 190);
@@ -112,6 +132,9 @@ function drawBackground(ctx, state, t) {
 }
 
 function drawBrazier(ctx, b, t) {
+  ctx.save();
+  if(b.kind==='Frost') ctx.filter='hue-rotate(165deg)';
+  if(b.kind==='Sun') ctx.filter='hue-rotate(15deg) brightness(1.3)';
   const flick = 0.85 + 0.15 * Math.sin(t * 7 + b.x);
   // Stone base.
   ctx.fillStyle = '#232c4a';
@@ -127,30 +150,47 @@ function drawBrazier(ctx, b, t) {
   ctx.ellipse(b.x, b.y - 4, 24, 9, 0, 0, Math.PI * 2);
   ctx.fill();
   if (b.lit) {
-    const fg = ctx.createRadialGradient(b.x, b.y - 12, 2, b.x, b.y - 12, 46 * flick);
+    // The flame grows with the brazier's level: a level-3 brazier burns
+    // visibly taller and wider than a level-1 one, so the field shows
+    // the investment without opening the shop.
+    const lv = b.level || 1;
+    const flameH = 1 + 0.22 * (lv - 1);
+    const fg = ctx.createRadialGradient(b.x, b.y - 12, 2, b.x, b.y - 12, 46 * flick * flameH);
     fg.addColorStop(0, 'rgba(255,207,110,0.9)');
     fg.addColorStop(0.5, 'rgba(255,140,26,0.45)');
     fg.addColorStop(1, 'rgba(255,140,26,0)');
     ctx.fillStyle = fg;
-    ctx.beginPath(); ctx.arc(b.x, b.y - 12, 46 * flick, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y - 12, 46 * flick * flameH, 0, Math.PI * 2); ctx.fill();
     // Flame tongues.
     ctx.fillStyle = PALETTE.lanternHot;
     ctx.beginPath();
     ctx.moveTo(b.x - 9, b.y - 6);
-    ctx.quadraticCurveTo(b.x - 12, b.y - 26 * flick, b.x, b.y - 34 * flick);
-    ctx.quadraticCurveTo(b.x + 12, b.y - 26 * flick, b.x + 9, b.y - 6);
+    ctx.quadraticCurveTo(b.x - 12, b.y - 26 * flick * flameH, b.x, b.y - 34 * flick * flameH);
+    ctx.quadraticCurveTo(b.x + 12, b.y - 26 * flick * flameH, b.x + 9, b.y - 6);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = PALETTE.lanternDeep;
     ctx.beginPath();
     ctx.moveTo(b.x - 5, b.y - 6);
-    ctx.quadraticCurveTo(b.x - 6, b.y - 18 * flick, b.x, b.y - 24 * flick);
-    ctx.quadraticCurveTo(b.x + 6, b.y - 18 * flick, b.x + 5, b.y - 6);
+    ctx.quadraticCurveTo(b.x - 6, b.y - 18 * flick * flameH, b.x, b.y - 24 * flick * flameH);
+    ctx.quadraticCurveTo(b.x + 6, b.y - 18 * flick * flameH, b.x + 5, b.y - 6);
     ctx.closePath(); ctx.fill();
   } else {
     ctx.fillStyle = PALETTE.textDim;
     ctx.font = '600 13px Georgia, serif';
     ctx.textAlign = 'center';
     ctx.fillText('E — LIGHT  (10 fuel)', b.x, b.y + 44);
+  }
+  ctx.restore();
+  ctx.fillStyle=b.damageFlash>0?'#ff426f':'#ffe2a0';
+  for(let i=0;i<(b.level||0);i++) ctx.fillRect(b.x-12+i*10,b.y+28,6,5);
+  if(b.damageFlash>0) { ctx.strokeStyle='#ff426f'; ctx.strokeRect(b.x-28,b.y-40,56,72); }
+  if(b.lit && b.kind==='Frost') {
+    ctx.fillStyle='#c4f5ff';
+    for(let i=0;i<8;i++) ctx.fillRect(b.x+Math.sin(i*2+t)*28,b.y-15-((t*18+i*9)%55),3,3);
+  }
+  if(b.lit && b.kind==='Sun') {
+    ctx.strokeStyle='#ffd76c';
+    for(let i=0;i<8;i++) { const a=i*Math.PI/4+t*0.3; ctx.beginPath(); ctx.moveTo(b.x+Math.cos(a)*25,b.y-20+Math.sin(a)*25); ctx.lineTo(b.x+Math.cos(a)*40,b.y-20+Math.sin(a)*40); ctx.stroke(); }
   }
 }
 
@@ -208,7 +248,7 @@ function drawEnemy(ctx, e, t) {
     ctx.fillStyle = PALETTE.shadeEye;
     ctx.beginPath(); ctx.arc(-5, -3, 2.6, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(5, -3, 2.6, 0, Math.PI * 2); ctx.fill();
-  } else if (e.type === 'wisp') {
+  } else if (e.type === 'wisp' || e.type === 'hollow' || e.type === 'mirror' || e.type === 'thief' || e.type === 'stalker' || e.type === 'splitter' || e.type === 'siphon') {
     // A cold flame teardrop, darting.
     ctx.rotate(Math.sin(e.wobble) * 0.5);
     ctx.fillStyle = col;
@@ -352,6 +392,7 @@ function drawWorld(ctx, state, t) {
     ctx.fillRect(bank.x-bank.radius,bank.y-bank.radius,bank.radius*2,bank.radius*2);
   }
   drawBackground(ctx, state, t);
+  drawHollow(ctx,state,t);
   for (const b of state.braziers) drawBrazier(ctx, b, t);
   for (const em of state.embers) drawEmber(ctx, em, t);
   for (const e of state.enemies) drawEnemy(ctx, e, t);
@@ -403,7 +444,7 @@ function drawDarkness(ctx, state, t) {
   const lightR = effectiveRadius(p,state);
   punchLight(0, dctx, p.x, p.y, lightR, 1);
   for (const b of state.braziers) {
-    if (b.lit) punchLight(0, dctx, b.x, b.y - 8, b.radius * (0.95 + 0.05 * Math.sin(t * 5 + b.x)), 0.95);
+    if (b.lit) punchLight(0, dctx, b.x, b.y - 8, (b.lightRadius||b.radius) * (0.95 + 0.05 * Math.sin(t * 5 + b.x)), 0.95);
   }
   for (const f of state.flares) punchLight(0, dctx, f.x, f.y, 90, 0.9);
   for (const em of state.embers) punchLight(0, dctx, em.x, em.y, 26, 0.55);
@@ -429,7 +470,14 @@ function drawHud(ctx, state) {
   ctx.fillRect(0, 0, VIEW.w, 54);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '700 22px Georgia, serif';
-  const nightLabel = `NIGHT ${state.night||1}/3 — ${state.wave%6===0?"BOSS":`WAVE ${(state.wave-1)%6+1}/5`}`;
+  // Campaign nights count down from 3; the Hollow Dawn (night 4) and
+  // the endless deep (night 5+) count up instead, so the label never
+  // reads "NIGHT 4/3" — the run has outgrown the campaign by then.
+  const wt = waveTitle(Math.max(1, state.wave));
+  const night = state.night || 1;
+  const nightLabel = night <= 3
+    ? `NIGHT ${night}/3 — ${wt.wave}`
+    : `NIGHT ${night} · HOLLOW DAWN — ${wt.wave}`;
   const nightLabelWidth = ctx.measureText(nightLabel).width;
   ctx.fillText(nightLabel, 18, 35);
   ctx.font = '600 17px Georgia, serif';
@@ -553,10 +601,13 @@ function drawTitle(ctx, state, t) {
   ctx.fillText('Ember Fields / Drowned Hollow / Gloam Citadel', VIEW.w / 2, 382);
   ctx.fillText('your weapon and your lifeline: light burns shadows,', VIEW.w / 2, 408);
   ctx.fillText('fuel runs out, and embers are the only refill.', VIEW.w / 2, 434);
+  ctx.fillStyle = '#e8c6ff';
+  ctx.font = 'italic 600 17px Georgia, serif';
+  ctx.fillText('Survive the third dawn, and the Hollow Dawn will answer.', VIEW.w / 2, 462);
   ctx.fillStyle = PALETTE.lanternHot;
   ctx.font = '700 18px Georgia, serif';
-  ctx.fillText('WASD move  ·  Mouse aim  ·  Click / Space flare', VIEW.w / 2, 472);
-  ctx.fillText('Shift dash · Q nova · E brazier · P pause · M mute', VIEW.w / 2, 498);
+  ctx.fillText('WASD move  ·  Mouse aim  ·  Click / Space flare', VIEW.w / 2, 492);
+  ctx.fillText('Shift dash · Q nova · E brazier · P pause · M mute', VIEW.w / 2, 518);
   const pulse = 0.65 + 0.35 * Math.sin(t * 3);
   ctx.globalAlpha = pulse;
   ctx.fillStyle = PALETTE.lanternHot;
@@ -622,6 +673,7 @@ function runRows(state) {
     ['Nights cleared', stats.nightsCleared],
     ['Shadows banished', state.kills],
     ['Embers collected', stats.embersCollected],
+    ['Flares fired', stats.flaresFired || 0],
     ['Novas cast', stats.novaCasts],
     ['Dashes', stats.dashes],
     ['Damage dealt', Math.round(stats.damageDealt)],
@@ -686,8 +738,12 @@ function drawPause(ctx, state) {
 }
 
 function drawEnd(ctx, state, won) {
+  state.stats.beaconsLit=litBeacons(state);
   dimArena(ctx, state);
-  panel(ctx, 160, 55, 960, 610);
+  // The panel is tall enough for the whole ledger: nine run rows, the
+  // fallen sovereigns, and the v3 summary lines — nothing draws outside
+  // the panel or on top of the continue prompt anymore.
+  panel(ctx, 160, 55, 960, 665);
   ctx.textAlign = 'center';
   ctx.fillStyle = won ? '#ffd97a' : '#ff5d6c';
   ctx.font = '700 48px Georgia, serif';
@@ -698,6 +754,9 @@ function drawEnd(ctx, state, won) {
     : `The lantern fell on night ${state.night}, wave ${state.wave}.`, 640, 154);
   reportRow(ctx, 'SCORE', state.score.toLocaleString('en-US'), 210, 202, 400);
   reportRow(ctx, 'BEST SCORE', state.best.toLocaleString('en-US'), 670, 202, 400);
+  ctx.font='16px Georgia';
+  ctx.fillText(`Nights survived ${state.stats.nightsCleared} · Beacons lit ${state.stats.beaconsLit}/3 · Braziers placed ${state.stats.braziersPlaced||0}`,640,640);
+  ctx.fillText(`Vault banked ${state.stats.embersBanked||0} embers · Best endless wave ${state.bestEndless||0} · Flares fired ${state.stats.flaresFired||0}`,640,664);
   runRows(state).forEach(([label, value], index) => {
     reportRow(ctx, label, value, 210, 250 + index * 35, 400);
   });

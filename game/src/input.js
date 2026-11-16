@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — input.js
 // One job: keyboard and mouse state, in canvas coordinates.
 // Tracks held keys, just-pressed edges (cleared once per frame by the

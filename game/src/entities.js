@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — entities.js
 // One job: everything that lives, moves and collides in the arena —
 // the Warden, the shadows, flare bolts, enemy bolts, embers, braziers
@@ -7,8 +8,11 @@
 import {
   VIEW, PLAYER, ENEMIES, BOSS, BRAZIERS, BRAZIER_LIGHT_COST,
   BRAZIER_BURN_DPS, BRAZIER_HEAL, EMBER_FUEL, EMBER_SCORE, COMBO_WINDOW,
+  bossNameForNight, brazierStats,
 } from './config.js';
 import { sfx } from './audio.js';
+import { endlessScale } from './config.js';
+import { startHollow, updateHollow, brazierDps } from './hollow.js';
 
 export function makePlayer() {
   return {
@@ -32,6 +36,8 @@ let enemyId = 0;
 export function makeEnemy(type, x, y, wave, elite = false) {
   const def = ENEMIES[type];
   const scale = { hp: 1 + 0.12 * (wave - 1), speed: 1 + 0.04 * (wave - 1) };
+  scale.hp *= endlessScale(wave).hp;
+  scale.speed *= endlessScale(wave).speed;
   return {
     id: ++enemyId, elite, type, x, y, def,
     hp: def.hp * scale.hp * (elite ? 3 : 1),
@@ -47,10 +53,11 @@ export function makeEnemy(type, x, y, wave, elite = false) {
 export function makeBoss(x, y, wave) {
   const e = makeEnemy('shade', x, y, wave);
   e.boss = true;
-  e.night = Math.min(3, Math.ceil(wave / 6));
-  e.name = ['The Gloam King','The Hollow Tide','The Gloam Queen'][e.night-1];
+  e.night = Math.ceil(wave / 6);
+  e.name = bossNameForNight(e.night);
   e.type = 'boss';
   e.hp = BOSS.hp * (wave >= 10 ? 1.35 : 1);
+  e.hp *= 1 + Math.max(0,e.night-3)*0.65;
   e.maxHp = e.hp;
   e.speed = BOSS.speed;
   e.radius = BOSS.radius;
@@ -100,6 +107,7 @@ export function updatePlayer(p, input, dt, state) {
   p.x = Math.max(28, Math.min(VIEW.w - 28, p.x + p.vx * dt));
   p.y = Math.max(28, Math.min(VIEW.h - 28, p.y + p.vy * dt));
   p.walkPhase += sp * dt * 0.05;
+  if(sp>30 && Math.random()<dt*22) spawnBurst(state.particles,p.x,p.y,'#ff9a3d',1,25);
 
   // Aim at the mouse; the lantern points where the player looks.
   p.aim = Math.atan2(input.mouse.y - p.y, input.mouse.x - p.x);
@@ -151,12 +159,45 @@ export function updatePlayer(p, input, dt, state) {
   }
 }
 
+// A Lantern Thief reaching a lit brazier snuffs it: the light dies, the
+// brazier flashes red so the player sees the theft, and a warning floats
+// up. The brazier keeps its kind and level — relighting it with E costs
+// fuel again, but the investment is not lost.
+function douseBrazier(b, state) {
+  if (!b.lit) return false;
+  b.lit = false;
+  b.damageFlash = 0.6;
+  b.dousedAt = state.t;
+  addFloatText(state.floats, b.x, b.y - 52, 'DOUSED!', '#ff426f');
+  return true;
+}
+
 export function updateEnemies(list, p, dt, state) {
   for (const e of list) {
     e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // A Mirror Wraith can only bend one bolt a little more than once a
+    // second: the cooldown is what makes the reflection fair instead of
+    // a wall the player can never shoot through.
+    e.reflectCd = Math.max(0, (e.reflectCd || 0) - dt);
     const d = dist(e.x, e.y, p.x, p.y);
     const ang = Math.atan2(p.y - e.y, p.x - e.x);
     let mx = Math.cos(ang), my = Math.sin(ang);
+    if(e.type==='thief') {
+      const target=state.braziers.filter(b=>b.lit).sort((a,b)=>dist(e.x,e.y,a.x,a.y)-dist(e.x,e.y,b.x,b.y))[0];
+      if(target) { const a=Math.atan2(target.y-e.y,target.x-e.x); mx=Math.cos(a); my=Math.sin(a);
+        if(dist(e.x,e.y,target.x,target.y)<35) douseBrazier(target, state);
+      }
+    }
+    // Frost braziers chill everything inside their circle. The slow
+    // deepens with the brazier's level, so a level-3 Frost Brazier is
+    // a real wall: shadows crawl at barely a third of their speed.
+    for(const b of state.braziers) {
+      if (!b.lit || b.kind !== 'Frost') continue;
+      if (dist(e.x, e.y, b.x, b.y) >= b.radius) continue;
+      const slow = brazierStats('Frost', b.level || 1).slow;
+      mx *= slow; my *= slow;
+    }
+
 
     if (e.type === 'wisp') {
       // Wisps dart in a sine wobble, hard to lead with a flare.
@@ -225,7 +266,7 @@ export function updateEnemies(list, p, dt, state) {
       if (b.lit && dist(e.x, e.y, b.x, b.y) < b.radius) { inBrazier = true; break; }
     }
     if (inLantern || inBrazier) {
-      const dps = inBrazier ? Math.max(p.burnDps, BRAZIER_BURN_DPS) : p.burnDps;
+      const dps = inBrazier ? Math.max(p.burnDps, ...state.braziers.filter(b=>b.lit && dist(e.x,e.y,b.x,b.y)<b.radius).map(b=>brazierDps(b,state))) : p.burnDps;
       applyDamage(e, dps * dt, state);
       e.burnTick += dt;
       if (e.burnTick > 0.25) {
@@ -250,7 +291,16 @@ export function updateEnemies(list, p, dt, state) {
 export function updateFlares(list, enemies, dt, state) {
   for (let i = list.length - 1; i >= 0; i--) {
     const f = list[i];
+    // Count each flare once, the first frame it is simulated, so the
+    // run report can say how many shots the Warden actually fired.
+    if (!f.counted) { f.counted = true; state.stats.flaresFired = (state.stats.flaresFired || 0) + 1; }
     f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt;
+    const mirror=enemies.find(e=>e.hp>0 && e.type==='mirror' && !(e.reflectCd>0) && dist(f.x,f.y,e.x,e.y)<e.radius+8);
+    if(mirror) { const a=Math.atan2(state.player.y-mirror.y,state.player.x-mirror.x);
+      mirror.reflectCd = 1.2;
+      state.bolts.push({x:mirror.x,y:mirror.y,vx:Math.cos(a)*320,vy:Math.sin(a)*320,radius:7,damage:15,life:4});
+      list.splice(i,1); continue;
+    }
     f.hits ||= new Set();
     if (f.piercing) {
       for (const e of enemies) {
@@ -461,7 +511,7 @@ function updateEnrage(e, dt, state) {
     e.enrageTimer = 0;
     state.redFlash = 0.7;
     state.banner = {
-      text: ['THE GLOAM KING RAGES', 'THE TIDE RAGES', 'THE QUEEN RAGES'][e.night - 1],
+      text: e.night>=4?'THE HOLLOW KING RAGES':['THE GLOAM KING RAGES', 'THE TIDE RAGES', 'THE QUEEN RAGES'][e.night - 1],
       sub: 'The crown breaks. Keep moving.',
       t: 3,
     };
@@ -470,7 +520,8 @@ function updateEnrage(e, dt, state) {
   if (!e.enraged) return;
   e.enrageTimer -= dt;
   if (e.enrageTimer > 0) return;
-  e.enrageTimer = 6;
+  e.enrageTimer = e.night>=4?3:6;
+  if(e.night>=4) { state.enemies.push(makeEnemy('mirror',e.x+50,e.y,state.wave),makeEnemy('thief',e.x-50,e.y,state.wave)); state.shake=12; }
   e.enrageAttacks = (e.enrageAttacks || 0) + 1;
   if (e.night === 1) {
     for (let i = 0; i < 8; i++) {
@@ -498,6 +549,8 @@ function updateEnrage(e, dt, state) {
 
 // Fog and cursed ground belong to a night, rather than a wave.
 export function startEnvironment(state, night) {
+  state.hollowMoon = false;
+  state.hollowZones = [];
   state.fogBanks = night === 2 ? [
     { x: 230, y: 240, radius: 150, vx: 16, vy: 8 },
     { x: 640, y: 480, radius: 155, vx: -12, vy: 10 },
@@ -505,9 +558,11 @@ export function startEnvironment(state, night) {
   ] : [];
   state.darkZones = night === 3
     ? DARK_ZONES.map(z => ({ ...z, timer: 12 })) : [];
+  if (night >= 4) startHollow(state);
 }
 
 function updateEnvironment(state, dt) {
+  updateHollow(state, dt);
   for (const bank of state.fogBanks || []) {
     bank.x += bank.vx * dt;
     bank.y += bank.vy * dt;
@@ -546,4 +601,5 @@ function updateEnvironment(state, dt) {
 function applyDamage(enemy, amount, state) {
   state.stats.damageDealt += Math.min(Math.max(0, enemy.hp), amount);
   enemy.hp -= amount;
+  if(enemy.boss && amount>1) state.shake=Math.max(state.shake,5);
 }

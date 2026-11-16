@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — main.js
 // One job: the game's state machine and loop.
 // Phases: title → playing → (upgrade between waves) → playing …
@@ -14,13 +15,17 @@ import {
   startEnvironment, effectiveRadius, makeBoss, makePlayer, makeBraziers, updatePlayer, updateEnemies, updateFlares,
   updateBolts, updateEmbers, updateParticles, reapDead, spawnBurst, addFloatText,
 } from './entities.js';
-import { buildWave, updateWave, waveCleared } from './waves.js';
+import { buildWave, updateWave, waveCleared, waveTitle } from './waves.js';
 import { rollChoices } from './upgrades.js';
 import { render } from './render.js';
-import { SHOP, buy, drawShop } from './shop.js';
+import { SHOP, buy, buyBrazier, upgradeBrazier, drawShop } from './shop.js';
 import { dash, nova, updateAbilities, makeEnemy } from './entities.js';
 import { applyShot } from './shots.js';
 
+import { loadVault, saveVault, purchaseVault, applyVault, vaultCost, VAULT_ITEMS } from './vault.js';
+const vault=loadVault();
+import { litBeacons, beaconBonus, updateHollow, weakenKing } from './hollow.js';
+import { endlessScale, waveComp, themeForNight, brazierStats, endlessComp } from './config.js';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const input = createInput(canvas);
@@ -31,6 +36,7 @@ function makeRunStats() {
   return {
     killsByType: {},
     embersCollected: 0,
+    flaresFired: 0,
     novaCasts: 0,
     dashes: 0,
     damageDealt: 0,
@@ -87,21 +93,23 @@ function saveBest() {
 function startWave(n) {
   state.wave = n;
   const oldNight = state.night;
-  state.night = Math.min(3,Math.ceil(n/6));
+  state.night = Math.ceil(n/6);
   if (oldNight !== state.night) {
     startEnvironment(state, state.night);
     state.player.reviveUsed = false;
   }
   state.waveObj = buildWave(n, state.rng);
+  const wt = waveTitle(n);
   state.banner = {
-    text: `${['Ember Fields','Drowned Hollow','Gloam Citadel'][state.night-1]} — ${n%6===0?'BOSS':`WAVE ${(n-1)%6+1}/5`}`,
-    sub: n === 5 || n === 10 ? 'Something huge moves in the dark…' : 'Hold the light.',
+    text: `${wt.night} — ${wt.wave}`,
+    sub: wt.sub,
     t: 2.4,
   };
   sfx.waveHorn();
 }
 
 function startRun() {
+  state.beacons = undefined;
   state.stats = makeRunStats();
   state.bestCombo = 0;
   state.defeatedBosses = [];
@@ -112,6 +120,7 @@ function startRun() {
   state.blazing = false;
   state.player = makePlayer();
   state.braziers = makeBraziers();
+  applyVault(vault,state.player,state.braziers);
   state.enemies = [];
   state.flares = [];
   state.bolts = [];
@@ -131,7 +140,7 @@ function startRun() {
 }
 
 function openUpgrade() {
-  if(state.wave%6===0 && state.wave<18 && !state.endless) { state.phase='shop'; return; }
+  if(state.wave%6===0 && state.wave!==18) { state.phase='shop'; return; }
   state.choices = rollChoices(state.rng, state.takenUpgrades, 3);
   state.phase = 'upgrade';
   sfx.upgrade();
@@ -146,7 +155,7 @@ function pickUpgrade(i) {
   sfx.upgrade();
   spawnBurst(state.particles, state.player.x, state.player.y, '#ffd97a', 18, 200);
   if (state.wave >= WAVES_TOTAL && !state.endless) {
-    state.phase = 'victory';
+    endRun(true);
     saveBest();
     sfx.victory();
   } else {
@@ -156,7 +165,14 @@ function pickUpgrade(i) {
 }
 
 function endRun(won) {
+  state.stats.beaconsLit = litBeacons(state);
+  state.stats.embersBanked = (state.stats.embersBanked || 0) + (state.currency || 0);
+  try {
+    state.bestEndless = Math.max(Number(localStorage.getItem('lumenwarden-best-endless')) || 0, state.wave > 24 ? state.wave : 0);
+    localStorage.setItem('lumenwarden-best-endless', String(state.bestEndless));
+  } catch { state.bestEndless = state.wave > 24 ? state.wave : 0; }
   saveBest();
+  vault.bank+=state.currency||0; state.currency=0; saveVault(vault);
   state.phase = won ? 'victory' : 'gameover';
   if (won) sfx.victory(); else sfx.gameOver();
 }
@@ -172,6 +188,7 @@ for (let i = 0; i < 6; i++) {
 }
 
 function updateTitle(dt) {
+  for(let i=0;i<4;i++) if(input.pressed('Digit'+(i+1))) purchaseVault(vault,i);
   state.titleShadows.forEach((s, i) => {
     s.x += Math.sin(state.t * 0.5 + i * 2) * 12 * dt;
     s.y += Math.cos(state.t * 0.4 + i) * 8 * dt;
@@ -270,10 +287,9 @@ function updateEnd(dt) {
     if (state.phase === 'victory' && state.score > 0 && !state.endless) {
       // After dawn, R keeps the run going into the Endless Night.
       state.endless = true;
-      startWave(state.wave + 1);
-      state.phase = 'playing';
+      state.phase='shop';
     } else {
-      startRun();
+      state.phase='title';
     }
   }
 }
@@ -289,6 +305,8 @@ function frame(now) {
   if (state.phase === 'title') updateTitle(dt);
   else if (state.phase === 'playing') updatePlaying(dt);
   else if (state.phase === 'shop') {
+    for(let i=0;i<3;i++) if(input.pressed(['KeyB','KeyF','KeyS'][i])) buyBrazier(state,['Ember','Frost','Sun'][i]);
+    if(input.pressed('KeyU')) upgradeBrazier(state);
     for(let i=0;i<10;i++) if(input.pressed('Digit'+((i+1)%10))) buy(state,i);
     if(input.pressed('Enter')) { startWave(state.wave+1); state.phase='playing'; state.player.fuel=state.player.maxFuel; }
   }
@@ -298,9 +316,34 @@ function frame(now) {
   } else updateEnd(dt);
 
   render(ctx, state);
+  if(state.phase==='title') drawVaultPanel(ctx, vault);
   if(state.phase==='shop') drawShop(ctx,state);
   input.endFrame();
   requestAnimationFrame(frame);
+}
+
+// The Ember Vault on the title screen: the banked balance, and the four
+// permanent upgrades with their current level and next cost. Keys 1-4
+// buy (handled in updateTitle); the panel is drawn below the title
+// text, clear of the "Best score" line, so nothing overlaps.
+function drawVaultPanel(ctx, v) {
+  ctx.fillStyle = 'rgba(10,14,32,0.92)';
+  ctx.fillRect(220, 694, 840, 86);
+  ctx.strokeStyle = '#ffb347';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(220, 694, 840, 86);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd97a';
+  ctx.font = 'bold 17px Georgia';
+  ctx.fillText(`EMBER VAULT · ${v.bank} embers banked — permanent upgrades, press 1-4`, 640, 720);
+  VAULT_ITEMS.forEach((name, i) => {
+    const level = v.levels[i];
+    const maxed = level >= (i === 3 ? 1 : 10);
+    const cost = maxed ? 'MAX' : `${vaultCost(v, i)}e`;
+    ctx.fillStyle = maxed ? '#789980' : '#f2ead8';
+    ctx.font = '16px Georgia';
+    ctx.fillText(`${i + 1}: ${name} [${level}] · ${cost}`, 320 + i * 213, 752);
+  });
 }
 
 // ---- Screenshot presets (?shot=title|action|upgrade|boss) -------------
@@ -487,6 +530,66 @@ export function runSelfTest() {
     render(ctx, state);
   if(state.phase==='shop') drawShop(ctx,state);
     done('render_ok');
+    startWave(19);
+    out.checks.night4=state.night===4 && buildWave(24,state.rng).bossAt;
+    const king=makeBoss(900,600,24); king.hp=king.maxHp*0.4; state.enemies=[king];
+    updateEnemies(state.enemies,p,0.01,state);
+    out.checks.hollow_king=king.name==='The Hollow King' && king.enraged;
+    state.currency=100; out.checks.brazier_purchase=buyBrazier(state,'Frost');
+    const placed=state.braziers.find(b=>b.kind==='Frost'); startWave(25);
+    out.checks.brazier_persistence=state.braziers.includes(placed);
+    const v=loadVault({getItem:()=>'{"bank":30,"levels":[1,0,0,0]}'});
+    const vp=makePlayer(); applyVault(v,vp,[]);
+    out.checks.vault=vp.maxHp===115 && v.bank===30;
+
+    startEnvironment(state,4);
+    out.checks.hollow_fog = state.hollowMoon && state.fogBanks.length===3;
+    const zone=state.hollowZones[0]; p.x=zone.x; p.y=zone.y; p.fuel=100;
+    updateHollow(state,0.1);
+    out.checks.hollow_drain = p.fuel<100 && zone.x!==410;
+    const beacon=state.beacons[0]; p.x=beacon.x; p.y=beacon.y;
+    updateHollow(state,2);
+    out.checks.beacon_channel=beacon.lit && beaconBonus(state)===1.25;
+    const fullKing=makeBoss(900,600,24);
+    const fullHp=fullKing.hp; weakenKing(fullKing,state);
+    out.checks.beacon_king=fullKing.hp===fullHp*0.9;
+    state.currency=100; const oldRadius=placed.radius;
+    buyBrazier(state,'Frost');
+    out.checks.brazier_level=placed.level===2 && placed.radius===oldRadius+20;
+    out.checks.endless_scaling=endlessScale(30).hp>1 && endlessScale(30).speed>1 && endlessScale(30).elite>0;
+    out.checks.hollow_swarm=waveComp(31).hollow>waveComp(25).hollow && makeEnemy('hollow',0,0,25).def.hp===30;
+    // v3 tables: one night one palette, one brazier table, one endless
+    // composer — the self-test pins the tables to the live formulas so
+    // a tuning edit that drifts from the code fails loudly here.
+    out.checks.night_theme = themeForNight(4).skyTop === '#211531' && themeForNight(1).name === 'Ember Fields' && themeForNight(5).name === 'The Endless Night';
+    out.checks.brazier_table = brazierStats('Sun', 2).radius === 190 && Math.round(brazierStats('Frost', 3).dps) === 22 && brazierStats('Ember', 1).dps === 26;
+    out.checks.endless_comp = endlessComp(31).hollow === 20 && endlessComp(31).mirror === 4 && endlessComp(25).hollow === 8;
+    const wt = waveTitle(19);
+    out.checks.wave_title = wt.night === 'The Hollow Dawn · Night 4' && wt.wave === 'WAVE 1/5';
+    // Mirror Wraiths reflect once, then need 1.2s before the next
+    // reflection: the second bolt in the same instant must hit instead.
+    state.bolts = [];
+    const wraith = makeEnemy('mirror', 500, 400, 19);
+    state.enemies = [wraith];
+    updateFlares([{ x: 480, y: 400, vx: 200, vy: 0, life: 1, damage: 10, blast: 10 }], state.enemies, 0.01, state);
+    out.checks.mirror_reflect = state.bolts.length === 1 && wraith.reflectCd > 0;
+    const wraithHp = wraith.hp;
+    updateFlares([{ x: 480, y: 400, vx: 200, vy: 0, life: 1, damage: 10, blast: 10 }], state.enemies, 0.01, state);
+    out.checks.mirror_cooldown = state.bolts.length === 1 && wraith.hp < wraithHp;
+    // Flares fired across the whole scripted run were counted.
+    out.checks.flares_fired = state.stats.flaresFired > 0;
+    // Vault costs grow 10 per level; the panel draws without throwing.
+    out.checks.vault_cost = vaultCost({ levels: [0, 0, 0, 0] }, 0) === 10 && vaultCost({ levels: [2, 0, 0, 0] }, 0) === 30;
+    drawVaultPanel(ctx, vault);
+    done('vault_panel_render');
+    // Best endless wave persists: a wave-30 loss must store 30.
+    state.wave = 30;
+    endRun(false);
+    out.checks.best_endless = state.bestEndless === 30 && Number(localStorage.getItem('lumenwarden-best-endless')) === 30;
+    render(ctx, state);
+    done('endless_stats_render');
+    render(ctx,state);
+    done('hollow_render');
     out.ok = Object.values(out.checks).every((v) => v === true || (typeof v === 'number' && v >= 0));
   } catch (err) {
     out.errors.push(String(err && err.stack || err));

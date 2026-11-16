@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — waves.js
 // One job: what each wave throws at the player and when.
 // A wave is a spawn queue built from its composition; the queue drains
@@ -5,11 +6,63 @@
 // Boss waves add the Gloam King once the escort has mostly arrived.
 
 import { sfx } from './audio.js';
-import { VIEW, BOSS_WAVES, waveComp } from './config.js';
+import { endlessScale } from './config.js';
+import { weakenKing } from './hollow.js';
+import { VIEW, BOSS_WAVES, waveComp, NIGHT_THEMES, bossNameForNight, bossSubForNight, endlessComp } from './config.js';
 import { makeEnemy, makeBoss } from './entities.js';
 
+// ---- v3: wave composition, declared as data ---------------------------
+// Each night bends the baseline mix toward its own terrain. Night 1 is
+// the baseline untouched; night 2 floods the arena with wisps and
+// spitters at the cost of shades; nights 3+ send the hunters —
+// stalkers, siphons and splitters. The table lives in config.js and is
+// the single source of truth: waveComp() only applies it, so tuning a
+// night means editing one row and nothing else.
+
+// Every boss wave is a multiple of six: the Gloam King on 6, the Hollow
+// Tide on 12, the Gloam Queen on 18, and the Hollow King on 24, 30, 36…
+// — the crown returns every sixth wave for as long as the run lasts.
+export const BOSS_SCHEDULE = {
+  every: 6,
+  names: ['The Gloam King', 'The Hollow Tide', 'The Gloam Queen', 'The Hollow King'],
+};
+
+export function isBossWave(n) {
+  return n % BOSS_SCHEDULE.every === 0;
+}
+
+export function bossWaveName(n) {
+  const night = Math.ceil(n / 6);
+  return BOSS_SCHEDULE.names[Math.min(BOSS_SCHEDULE.names.length, night) - 1];
+}
+
+// (endlessComp lives in config.js, next to ENDLESS_TABLE.)
+
+// Spawn gap: waves start roomy and tighten as the night deepens. The
+// endless deep tightens further, but never below 0.30s — the player
+// must always be able to read the next arrival.
+export function spawnGapFor(n) {
+  if (n > 24) return Math.max(0.3, 1.05 - n * 0.06);
+  return Math.max(0.35, 1.05 - n * 0.06);
+}
+
+// The banner text for a wave: night name, wave number, and the taunt.
+// Nights 1-3 use their theme names; night 4+ is the Hollow Dawn, and
+// the endless deep (night 5+) keeps the same name with a rising number.
+export function waveTitle(n) {
+  const night = Math.ceil(n / 6);
+  const nightName = night <= 3
+    ? NIGHT_THEMES[night - 1].name
+    : `The Hollow Dawn · Night ${night}`;
+  const wave = n % 6 === 0 ? 'BOSS' : `WAVE ${(n - 1) % 6 + 1}/5`;
+  const sub = (n === 5 || n === 10)
+    ? 'Something huge moves in the dark…'
+    : (night >= 4 ? NIGHT_THEMES[3].sub : 'Hold the light.');
+  return { night: nightName, wave, sub };
+}
+
 export function buildWave(n, rng) {
-  const comp = waveComp(n, Math.min(3, Math.ceil(n / 6)));
+  const comp = waveComp(n, Math.ceil(n / 6));
   const queue = [];
   for (const [type, count] of Object.entries(comp)) {
     for (let i = 0; i < count; i++) queue.push(type);
@@ -23,9 +76,9 @@ export function buildWave(n, rng) {
     n,
     queue: ordered,
     spawnTimer: 0.4,
-    spawnGap: Math.max(0.35, 1.05 - n * 0.06),
+    spawnGap: spawnGapFor(n),
     bossSpawned: false,
-    bossAt: BOSS_WAVES.includes(n),
+    bossAt: isBossWave(n),
   };
 }
 
@@ -52,8 +105,8 @@ export function updateWave(wave, enemies, player, dt, state, rng) {
       wave.spawnTimer = wave.spawnGap * rng.range(0.7, 1.3);
       const type = wave.queue.shift();
       const at = edgePoint(rng, player.x, player.y);
-      const night = Math.min(3, Math.ceil(wave.n / 6));
-      const elite = (wave.n - 1) % 6 >= 1 && rng.chance(0.08 + (night - 1) * 0.02);
+      const night = Math.ceil(wave.n / 6);
+      const elite = (wave.n - 1) % 6 >= 1 && rng.chance(Math.min(0.85, 0.08 + (night - 1) * 0.02 + endlessScale(wave.n).elite));
       enemies.push(makeEnemy(type, at.x, at.y, wave.n, elite));
       if (elite) sfx.eliteSpawn();
     }
@@ -61,8 +114,10 @@ export function updateWave(wave, enemies, player, dt, state, rng) {
     // The boss enters once the escort is out, with a warning banner.
     wave.bossSpawned = true;
     const at = edgePoint(rng, player.x, player.y);
-    enemies.push(makeBoss(at.x, at.y, wave.n));
-    state.banner = { text: `${['THE GLOAM KING','THE HOLLOW TIDE','THE GLOAM QUEEN'][Math.min(2,Math.ceil(wave.n/6)-1)]} AWAKENS`, sub: ['Break his crown of dark', 'Drown the tide in light', 'Break her crown of dark'][Math.min(2,Math.ceil(wave.n/6)-1)], t: 2.6 };
+    const night = Math.ceil(wave.n / 6);
+    enemies.push(weakenKing(makeBoss(at.x, at.y, wave.n), state));
+    if (night >= 4) sfx.hollowRoar(); else sfx.bossRoar();
+    state.banner = { text: `${bossNameForNight(night)} AWAKENS`, sub: bossSubForNight(night), t: 2.6 };
   }
 }
 

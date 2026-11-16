@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: MIT
 // LUMENWARDEN — shop.js
 // One job: dawn purchases, their effects, and the shop panel.
 
 import { sfx } from './audio.js';
-import { VIEW } from './config.js';
+import { VIEW, BRAZIER_TYPES, brazierStats } from './config.js';
 
 export const SHOP = [
   {
@@ -75,7 +76,7 @@ export function buy(state, index) {
 
 export function drawShop(ctx, state) {
   ctx.fillStyle = 'rgba(12,16,30,.97)';
-  ctx.fillRect(45, 50, 1190, 650);
+  ctx.fillRect(45, 50, 1190, 672);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd98a';
   ctx.font = 'bold 38px Georgia';
@@ -95,6 +96,68 @@ export function drawShop(ctx, state) {
     ctx.font = '17px Georgia';
     ctx.fillText(item.desc, x + 275, y + 59);
   });
+  drawBrazierSection(ctx, state);
   ctx.font = '22px Georgia';
-  ctx.fillText('ENTER — Set out into the next night', 640, 670);
+  ctx.fillText('ENTER — Set out into the next night', 640, 712);
+}
+
+// The brazier foundry: three rows, one per kind, each showing what the
+// kind does, what it costs, and what level the Warden's braziers of
+// that kind have reached. Buying a kind fills the next empty socket;
+// buying it again raises the kind's level everywhere it burns, to a
+// maximum of 3. A socket's level is drawn as pips under the brazier in
+// the arena, so the shop and the field always agree.
+export function drawBrazierSection(ctx, state) {
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd98a';
+  ctx.font = 'bold 20px Georgia';
+  ctx.fillText('BRAZIERS — B / F / S place or upgrade · U upgrade last placed', 640, 632);
+  const kinds = ['Ember', 'Frost', 'Sun'];
+  kinds.forEach((kind, i) => {
+    const placed = state.braziers.filter((b) => b.kind === kind);
+    const level = placed.length ? Math.max(...placed.map((b) => b.level || 1)) : 0;
+    const stats = brazierStats(kind, Math.max(1, level));
+    const next = level >= 3 ? null : brazierStats(kind, level + 1);
+    const x = 100 + i * 400;
+    const y = 660;
+    ctx.fillStyle = level > 0 ? '#ffe5b0' : '#9aa7c7';
+    ctx.font = '17px Georgia';
+    const levelText = level === 0 ? 'not placed' : `Lv.${level}${next ? ` → Lv.${level + 1}` : ' · MAX'}`;
+    const radiusText = level === 0 ? `${stats.radius}r` : (next ? `${stats.radius}r → ${next.radius}r` : `${stats.radius}r`);
+    const dpsText = level === 0 ? `${Math.round(stats.dps)}dps` : (next ? `${Math.round(stats.dps)}dps → ${Math.round(next.dps)}dps` : `${Math.round(stats.dps)}dps`);
+    ctx.fillText(
+      `${BRAZIER_TYPES[kind].key} ${kind} · ${BRAZIER_TYPES[kind].placeCost}e · ${levelText} · ${radiusText} · ${dpsText}`,
+      x + 160, y,
+    );
+    ctx.fillStyle = '#9aa7c7';
+    ctx.font = '14px Georgia';
+    ctx.fillText(BRAZIER_TYPES[kind].desc, x + 160, y + 20);
+  });
+}
+
+export function buyBrazier(state, kind) {
+  const type = BRAZIER_TYPES[kind];
+  if (!type) return false;
+  const socket = state.braziers.find((b) => b.kind === kind && (b.level || 1) < 3)
+    || state.braziers.find((b) => !b.kind);
+  if (!socket || state.currency < type.placeCost) return false;
+  const upgrading = socket.kind === kind;
+  const level = upgrading ? (socket.level || 1) + 1 : 1;
+  const stats = brazierStats(kind, level);
+  state.currency -= type.placeCost;
+  Object.assign(socket, {
+    kind, level, lit: true,
+    radius: stats.radius, lightRadius: stats.lightRadius,
+  });
+  state.lastBrazierKind = kind;
+  if (!upgrading) state.stats.braziersPlaced = (state.stats.braziersPlaced || 0) + 1;
+  if (upgrading) sfx.brazierUpgrade(); else sfx.shopBuy();
+  return true;
+}
+
+// U upgrades whatever the Warden placed most recently: the same purchase
+// as pressing that kind's letter again, through one key.
+export function upgradeBrazier(state) {
+  if (!state.lastBrazierKind) return false;
+  return buyBrazier(state, state.lastBrazierKind);
 }
