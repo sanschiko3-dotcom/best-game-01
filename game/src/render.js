@@ -5,7 +5,9 @@
 // gradients at the lantern, the braziers, flares and embers, so the
 // light itself is the picture. HUD and menus draw on top, unlit.
 
-import { VIEW, PALETTE, PLAYER, WAVES_TOTAL, BOSS } from './config.js';
+import { DARK_ZONES, effectiveRadius } from './entities.js';
+import { drawShop } from './shop.js';
+import { VIEW, PALETTE, PLAYER, WAVES_TOTAL } from './config.js';
 
 let darkCanvas = null;
 let darkCtx = null;
@@ -168,6 +170,17 @@ function drawEmber(ctx, em, t) {
 }
 
 function drawEnemy(ctx, e, t) {
+  if (e.elite) {
+    ctx.strokeStyle = '#ffd45c';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(e.x,e.y,e.radius + 5,0,Math.PI*2);
+    ctx.stroke();
+    ctx.fillStyle = '#ffd45c';
+    ctx.font = '22px Georgia';
+    ctx.fillText('♛',e.x-10,e.y-e.radius-9);
+  }
+  if(e.hidden) return;
   const flash = e.hitFlash > 0;
   const col = flash ? '#ffffff' : e.def ? e.def.colour : PALETTE.boss;
   // A faint aura in the enemy's own colour, so it reads through the dark.
@@ -324,6 +337,20 @@ function drawPlayer(ctx, p, t) {
 }
 
 function drawWorld(ctx, state, t) {
+  if (state.blazing) {
+    ctx.strokeStyle = '#ffd45c';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(state.player.x,state.player.y,35 + Math.sin(t*8)*4,0,Math.PI*2);
+    ctx.stroke();
+  }
+  for (const bank of state.fogBanks || []) {
+    const glow = ctx.createRadialGradient(bank.x,bank.y,0,bank.x,bank.y,bank.radius);
+    glow.addColorStop(0,'rgba(160,180,200,0.22)');
+    glow.addColorStop(1,'rgba(160,180,200,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(bank.x-bank.radius,bank.y-bank.radius,bank.radius*2,bank.radius*2);
+  }
   drawBackground(ctx, state, t);
   for (const b of state.braziers) drawBrazier(ctx, b, t);
   for (const em of state.embers) drawEmber(ctx, em, t);
@@ -373,7 +400,7 @@ function drawDarkness(ctx, state, t) {
   dctx.globalCompositeOperation = 'destination-out';
   const p = state.player;
   const fuelFrac = p.fuel / PLAYER.maxFuel;
-  const lightR = p.lightRadius * (0.3 + 0.7 * fuelFrac) * (1 + 0.03 * Math.sin(t * 6));
+  const lightR = effectiveRadius(p,state);
   punchLight(0, dctx, p.x, p.y, lightR, 1);
   for (const b of state.braziers) {
     if (b.lit) punchLight(0, dctx, b.x, b.y - 8, b.radius * (0.95 + 0.05 * Math.sin(t * 5 + b.x)), 0.95);
@@ -391,6 +418,10 @@ function drawDarkness(ctx, state, t) {
 }
 
 function drawHud(ctx, state) {
+  ctx.fillStyle = '#ffd45c';
+  ctx.font = 'bold 18px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(`FLAME STREAK ${state.streak || 0}${state.blazing ? ' · BLAZING' : ''}`, 640, 100);
   const p = state.player;
   ctx.textAlign = 'left';
   // Top bar.
@@ -398,10 +429,12 @@ function drawHud(ctx, state) {
   ctx.fillRect(0, 0, VIEW.w, 54);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '700 22px Georgia, serif';
-  ctx.fillText(`WAVE ${Math.min(state.wave, WAVES_TOTAL)} / ${WAVES_TOTAL}`, 18, 35);
+  const nightLabel = `NIGHT ${state.night||1}/3 — ${state.wave%6===0?"BOSS":`WAVE ${(state.wave-1)%6+1}/5`}`;
+  const nightLabelWidth = ctx.measureText(nightLabel).width;
+  ctx.fillText(nightLabel, 18, 35);
   ctx.font = '600 17px Georgia, serif';
   ctx.fillStyle = PALETTE.textDim;
-  ctx.fillText(state.endless ? 'ENDLESS NIGHT' : 'THE LONG NIGHT', 215, 34);
+  ctx.fillText(state.endless ? 'ENDLESS NIGHT' : 'THE LONG NIGHT', 18 + nightLabelWidth + 16, 34);
   ctx.textAlign = 'center';
   ctx.fillStyle = PALETTE.lanternHot;
   ctx.font = '700 24px Georgia, serif';
@@ -446,7 +479,7 @@ function drawHud(ctx, state) {
   ctx.textAlign = 'right';
   ctx.fillStyle = PALETTE.textDim;
   ctx.font = '600 15px Georgia, serif';
-  ctx.fillText(left > 0 ? `SHADOWS LEFT: ${left}` : 'WAVE CLEAR!', VIEW.w - 18, 78);
+  ctx.fillText(left > 0 ? `SHADOWS LEFT: ${left}` : 'WAVE CLEAR!', VIEW.w - 18, 150);
 
   // Boss bar.
   const boss = state.enemies.find((e) => e.boss);
@@ -458,7 +491,7 @@ function drawHud(ctx, state) {
     roundRect(ctx, VIEW.w / 2 - 260, VIEW.h - 46, 520 * Math.max(0, boss.hp / boss.maxHp), 16, 8); ctx.fill();
     ctx.fillStyle = '#ffd7de';
     ctx.font = '700 15px Georgia, serif';
-    ctx.fillText(BOSS.name.toUpperCase(), VIEW.w / 2, VIEW.h - 54);
+    ctx.fillText(boss.name.toUpperCase(), VIEW.w / 2, VIEW.h - 54);
   }
 
   // Banner (wave start, boss warning).
@@ -503,8 +536,8 @@ function drawTitle(ctx, state, t) {
   ctx.fillStyle = 'rgba(4,6,18,0.45)';
   ctx.fillRect(0, 0, VIEW.w, VIEW.h);
   ctx.textAlign = 'center';
-  const glow = ctx.createRadialGradient(VIEW.w / 2, 250, 10, VIEW.w / 2, 250, 320);
-  glow.addColorStop(0, 'rgba(255,179,71,0.28)');
+  const glow = ctx.createRadialGradient(VIEW.w / 2, 250, 10, VIEW.w / 2, 250, 300 + Math.sin(t * 2) * 35);
+  glow.addColorStop(0, `rgba(255,179,71,${0.25 + Math.sin(t * 2) * 0.08})`);
   glow.addColorStop(1, 'rgba(255,179,71,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, VIEW.w, VIEW.h);
@@ -513,17 +546,17 @@ function drawTitle(ctx, state, t) {
   ctx.fillText('LUMENWARDEN', VIEW.w / 2, 250);
   ctx.fillStyle = PALETTE.text;
   ctx.font = 'italic 600 24px Georgia, serif';
-  ctx.fillText('Keep the last lantern burning through the Long Night.', VIEW.w / 2, 296);
+  ctx.fillText('Carry the lantern through three nights.', VIEW.w / 2, 296);
   panel(ctx, VIEW.w / 2 - 330, 340, 660, 208);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '600 18px Georgia, serif';
-  ctx.fillText('The dark sends its shadows in 10 waves. Your lantern is', VIEW.w / 2, 382);
+  ctx.fillText('Ember Fields / Drowned Hollow / Gloam Citadel', VIEW.w / 2, 382);
   ctx.fillText('your weapon and your lifeline: light burns shadows,', VIEW.w / 2, 408);
   ctx.fillText('fuel runs out, and embers are the only refill.', VIEW.w / 2, 434);
   ctx.fillStyle = PALETTE.lanternHot;
   ctx.font = '700 18px Georgia, serif';
   ctx.fillText('WASD move  ·  Mouse aim  ·  Click / Space flare', VIEW.w / 2, 472);
-  ctx.fillText('E light a brazier  ·  Survive to dawn — Wave 10', VIEW.w / 2, 498);
+  ctx.fillText('Shift dash · Q nova · E brazier · P pause · M mute', VIEW.w / 2, 498);
   const pulse = 0.65 + 0.35 * Math.sin(t * 3);
   ctx.globalAlpha = pulse;
   ctx.fillStyle = PALETTE.lanternHot;
@@ -582,54 +615,127 @@ function drawUpgrade(ctx, state) {
   ctx.fillText(`Score ${state.score.toLocaleString('en-US')}  ·  ${state.kills} shadows banished  ·  Next: Wave ${state.wave + 1}`, VIEW.w / 2, 560);
 }
 
-function drawPause(ctx, state) {
+// Shared ledger rows keep the pause and final report consistent.
+function runRows(state) {
+  const stats = state.stats;
+  return [
+    ['Nights cleared', stats.nightsCleared],
+    ['Shadows banished', state.kills],
+    ['Embers collected', stats.embersCollected],
+    ['Novas cast', stats.novaCasts],
+    ['Dashes', stats.dashes],
+    ['Damage dealt', Math.round(stats.damageDealt)],
+    ['Best combo', state.bestCombo],
+    ['Bosses defeated', stats.bossesDown],
+  ];
+}
+
+function reportRow(ctx, label, value, x, y, width) {
+  ctx.textAlign = 'left';
+  ctx.fillStyle = PALETTE.textDim;
+  ctx.font = '600 18px Georgia, serif';
+  ctx.fillText(label, x, y);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = PALETTE.text;
+  ctx.fillText(String(value), x + width, y);
+}
+
+function dimArena(ctx, state) {
   drawWorld(ctx, state, state.t);
   drawDarkness(ctx, state, state.t);
-  ctx.fillStyle = 'rgba(4,6,18,0.7)';
+  ctx.fillStyle = 'rgba(4,6,18,0.78)';
   ctx.fillRect(0, 0, VIEW.w, VIEW.h);
+}
+
+function drawPause(ctx, state) {
+  dimArena(ctx, state);
+  panel(ctx, 180, 90, 920, 550);
   ctx.textAlign = 'center';
-  ctx.fillStyle = PALETTE.text;
-  ctx.font = '700 52px Georgia, serif';
-  ctx.fillText('PAUSED', VIEW.w / 2, 360);
+  ctx.fillStyle = PALETTE.lanternHot;
+  ctx.font = '700 42px Georgia, serif';
+  ctx.fillText('PAUSED', 640, 150);
   ctx.fillStyle = PALETTE.textDim;
-  ctx.font = '600 20px Georgia, serif';
-  ctx.fillText('Press P or click to return to the night.', VIEW.w / 2, 404);
+  ctx.font = '600 18px Georgia, serif';
+  ctx.fillText('P / Esc / click — resume the night', 640, 188);
+  const controls = [
+    ['Move', 'WASD / arrow keys'],
+    ['Aim', 'Mouse'],
+    ['Flare', 'Click / Space'],
+    ['Dash', 'Left / right Shift'],
+    ['Dawn nova', 'Q / Space'],
+    ['Light brazier', 'E nearby'],
+    ['Choose blessing', '1 / 2 / 3 or click'],
+    ['Shop purchase', '1–9 / 0'],
+    ['Leave shop', 'Enter'],
+    ['Mute sound', 'M'],
+  ];
+  controls.forEach(([label, key], index) => {
+    reportRow(ctx, label, key, 220, 240 + index * 30, 460);
+  });
+  const snapshot = [
+    ['Night', state.night || 1],
+    ['Wave', state.wave],
+    ['Score', state.score],
+    ['Kills', state.kills],
+    ['Embers held', state.currency || 0],
+    ['Embers collected', state.stats.embersCollected],
+  ];
+  snapshot.forEach(([label, value], index) => {
+    reportRow(ctx, label, value, 750, 240 + index * 38, 300);
+  });
 }
 
 function drawEnd(ctx, state, won) {
-  drawWorld(ctx, state, state.t);
-  drawDarkness(ctx, state, state.t);
-  ctx.fillStyle = won ? 'rgba(255,190,90,0.22)' : 'rgba(20,4,10,0.66)';
-  ctx.fillRect(0, 0, VIEW.w, VIEW.h);
+  dimArena(ctx, state);
+  panel(ctx, 160, 55, 960, 610);
   ctx.textAlign = 'center';
-  if (won) {
-    ctx.fillStyle = '#ffd97a';
-    ctx.font = '700 64px Georgia, serif';
-    ctx.fillText('DAWN BREAKS', VIEW.w / 2, 260);
-    ctx.fillStyle = PALETTE.text;
-    ctx.font = 'italic 600 23px Georgia, serif';
-    ctx.fillText('The Long Night ends. Your lantern never went out.', VIEW.w / 2, 308);
-  } else {
-    ctx.fillStyle = '#ff5d6c';
-    ctx.font = '700 64px Georgia, serif';
-    ctx.fillText('THE LIGHT GOES OUT', VIEW.w / 2, 260);
-    ctx.fillStyle = PALETTE.text;
-    ctx.font = 'italic 600 23px Georgia, serif';
-    ctx.fillText(`The shadows take the lantern on Wave ${state.wave}.`, VIEW.w / 2, 308);
-  }
-  panel(ctx, VIEW.w / 2 - 280, 350, 560, 190);
+  ctx.fillStyle = won ? '#ffd97a' : '#ff5d6c';
+  ctx.font = '700 48px Georgia, serif';
+  ctx.fillText(won ? 'DAWN BREAKS' : 'THE LIGHT GOES OUT', 640, 116);
   ctx.fillStyle = PALETTE.text;
-  ctx.font = '700 26px Georgia, serif';
-  ctx.fillText(`SCORE  ${state.score.toLocaleString('en-US')}`, VIEW.w / 2, 404);
-  ctx.font = '600 19px Georgia, serif';
-  ctx.fillStyle = PALETTE.textDim;
-  ctx.fillText(`${state.kills} shadows banished  ·  Best ${state.best.toLocaleString('en-US')}`, VIEW.w / 2, 442);
-  ctx.fillText(won ? 'Endless Night continues — press R for more waves.' : 'The Warden rises again — press R to retry.', VIEW.w / 2, 478);
+  ctx.font = '600 20px Georgia, serif';
+  ctx.fillText(won ? 'Three nights remembered in the lantern’s glow.'
+    : `The lantern fell on night ${state.night}, wave ${state.wave}.`, 640, 154);
+  reportRow(ctx, 'SCORE', state.score.toLocaleString('en-US'), 210, 202, 400);
+  reportRow(ctx, 'BEST SCORE', state.best.toLocaleString('en-US'), 670, 202, 400);
+  runRows(state).forEach(([label, value], index) => {
+    reportRow(ctx, label, value, 210, 250 + index * 35, 400);
+  });
+  ctx.textAlign = 'left';
   ctx.fillStyle = PALETTE.lanternHot;
-  const pulse = 0.65 + 0.35 * Math.sin(state.t * 3);
-  ctx.globalAlpha = pulse;
-  ctx.font = '700 24px Georgia, serif';
-  ctx.fillText('PRESS R TO PLAY AGAIN', VIEW.w / 2, 600);
+  ctx.font = '700 20px Georgia, serif';
+  ctx.fillText('BANISHED BY TYPE', 670, 250);
+  const types = Object.entries(state.stats.killsByType)
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  types.forEach(([type, count], index) => {
+    const label = type.charAt(0).toUpperCase() + type.slice(1);
+    reportRow(ctx, label, count, 670, 282 + index * 25, 400);
+  });
+  if (!types.length) {
+    ctx.fillStyle = PALETTE.textDim;
+    ctx.font = 'italic 17px Georgia, serif';
+    ctx.fillText('No shadows banished this run.', 670, 282);
+  }
+  if (won) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = PALETTE.lanternHot;
+    ctx.font = '700 20px Georgia, serif';
+    ctx.fillText('FALLEN SOVEREIGNS', 210, 560);
+    state.defeatedBosses.forEach((boss, index) => {
+      ctx.fillStyle = PALETTE.text;
+      ctx.font = '600 16px Georgia, serif';
+      const x = 210 + index * 300;
+      ctx.fillText(`Night ${boss.night}`, x, 588);
+      ctx.fillText(boss.name, x, 612);
+    });
+  }
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.lanternHot;
+  ctx.font = '700 21px Georgia, serif';
+  ctx.globalAlpha = 0.8 + Math.sin(state.t * 3) * 0.2;
+  ctx.fillText(won ? 'R / CLICK — CONTINUE INTO ENDLESS NIGHT'
+    : 'R / CLICK — RAISE THE LANTERN AGAIN', 640, 700);
   ctx.globalAlpha = 1;
 }
 
@@ -652,7 +758,19 @@ export function render(ctx, state) {
   } else {
     drawWorld(ctx, state, t);
     drawDarkness(ctx, state, t);
+    if(state.night===3) for(const z of DARK_ZONES) {
+      ctx.fillStyle='rgba(145,35,170,0.35)'; ctx.beginPath();ctx.arc(z.x,z.y,z.r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#a65eb6';ctx.stroke();
+    }
+    if(state.night===2) {
+      ctx.fillStyle='rgba(115,180,190,0.12)';
+      for(let i=0;i<7;i++) ctx.fillRect((t*25+i*210)%1500-200,100+i*85,350,45);
+    }
+    for(const trail of state.trails||[]) {ctx.fillStyle=`rgba(255,210,120,${trail.life})`;ctx.beginPath();ctx.arc(trail.x,trail.y,25,0,7);ctx.fill();}
     drawHud(ctx, state);
+    ctx.textAlign='left';ctx.font='16px Georgia';ctx.fillStyle='#ffd97a';
+    ctx.fillText(`EMBERS ${state.currency||0}   SHIFT Dash ${state.player.dashCooldown.toFixed(1)}s   Q Nova ${Math.floor(state.player.nova)}%`,18,150);
+    if(state.phase==='shop') drawShop(ctx,state);
   }
   ctx.restore();
 }

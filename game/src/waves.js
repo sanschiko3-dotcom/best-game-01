@@ -4,11 +4,12 @@
 // on a timer, spawning at the arena's edges, away from the Warden.
 // Boss waves add the Gloam King once the escort has mostly arrived.
 
+import { sfx } from './audio.js';
 import { VIEW, BOSS_WAVES, waveComp } from './config.js';
 import { makeEnemy, makeBoss } from './entities.js';
 
 export function buildWave(n, rng) {
-  const comp = waveComp(n);
+  const comp = waveComp(n, Math.min(3, Math.ceil(n / 6)));
   const queue = [];
   for (const [type, count] of Object.entries(comp)) {
     for (let i = 0; i < count; i++) queue.push(type);
@@ -51,14 +52,17 @@ export function updateWave(wave, enemies, player, dt, state, rng) {
       wave.spawnTimer = wave.spawnGap * rng.range(0.7, 1.3);
       const type = wave.queue.shift();
       const at = edgePoint(rng, player.x, player.y);
-      enemies.push(makeEnemy(type, at.x, at.y, wave.n));
+      const night = Math.min(3, Math.ceil(wave.n / 6));
+      const elite = (wave.n - 1) % 6 >= 1 && rng.chance(0.08 + (night - 1) * 0.02);
+      enemies.push(makeEnemy(type, at.x, at.y, wave.n, elite));
+      if (elite) sfx.eliteSpawn();
     }
   } else if (wave.bossAt && !wave.bossSpawned) {
     // The boss enters once the escort is out, with a warning banner.
     wave.bossSpawned = true;
     const at = edgePoint(rng, player.x, player.y);
     enemies.push(makeBoss(at.x, at.y, wave.n));
-    state.banner = { text: 'THE GLOAM KING AWAKENS', sub: 'Break his crown of dark', t: 2.6 };
+    state.banner = { text: `${['THE GLOAM KING','THE HOLLOW TIDE','THE GLOAM QUEEN'][Math.min(2,Math.ceil(wave.n/6)-1)]} AWAKENS`, sub: ['Break his crown of dark', 'Drown the tide in light', 'Break her crown of dark'][Math.min(2,Math.ceil(wave.n/6)-1)], t: 2.6 };
   }
 }
 

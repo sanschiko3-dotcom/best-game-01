@@ -11,12 +11,14 @@ import { makeRng } from './random.js';
 import { createInput } from './input.js';
 import { unlockAudio, toggleMute, sfx } from './audio.js';
 import {
-  makePlayer, makeBraziers, updatePlayer, updateEnemies, updateFlares,
+  startEnvironment, effectiveRadius, makeBoss, makePlayer, makeBraziers, updatePlayer, updateEnemies, updateFlares,
   updateBolts, updateEmbers, updateParticles, reapDead, spawnBurst, addFloatText,
 } from './entities.js';
 import { buildWave, updateWave, waveCleared } from './waves.js';
 import { rollChoices } from './upgrades.js';
 import { render } from './render.js';
+import { SHOP, buy, drawShop } from './shop.js';
+import { dash, nova, updateAbilities, makeEnemy } from './entities.js';
 import { applyShot } from './shots.js';
 
 const canvas = document.getElementById('game');
@@ -25,7 +27,22 @@ const input = createInput(canvas);
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') || (Date.now() % 2147483647));
 
+function makeRunStats() {
+  return {
+    killsByType: {},
+    embersCollected: 0,
+    novaCasts: 0,
+    dashes: 0,
+    damageDealt: 0,
+    bossesDown: 0,
+    nightsCleared: 0,
+  };
+}
+
 export const state = {
+  stats: makeRunStats(),
+  bestCombo: 0,
+  defeatedBosses: [],
   phase: 'title',
   t: 0,
   rng: makeRng(seed),
@@ -69,9 +86,15 @@ function saveBest() {
 
 function startWave(n) {
   state.wave = n;
+  const oldNight = state.night;
+  state.night = Math.min(3,Math.ceil(n/6));
+  if (oldNight !== state.night) {
+    startEnvironment(state, state.night);
+    state.player.reviveUsed = false;
+  }
   state.waveObj = buildWave(n, state.rng);
   state.banner = {
-    text: n === 10 ? 'WAVE 10 — THE LAST NIGHT' : `WAVE ${n}`,
+    text: `${['Ember Fields','Drowned Hollow','Gloam Citadel'][state.night-1]} — ${n%6===0?'BOSS':`WAVE ${(n-1)%6+1}/5`}`,
     sub: n === 5 || n === 10 ? 'Something huge moves in the dark…' : 'Hold the light.',
     t: 2.4,
   };
@@ -79,6 +102,14 @@ function startWave(n) {
 }
 
 function startRun() {
+  state.stats = makeRunStats();
+  state.bestCombo = 0;
+  state.defeatedBosses = [];
+  state.currency=0; state.trails=[];
+  state.night = 0;
+  state.streak = 0;
+  state.streakTimer = 0;
+  state.blazing = false;
   state.player = makePlayer();
   state.braziers = makeBraziers();
   state.enemies = [];
@@ -100,6 +131,7 @@ function startRun() {
 }
 
 function openUpgrade() {
+  if(state.wave%6===0 && state.wave<18 && !state.endless) { state.phase='shop'; return; }
   state.choices = rollChoices(state.rng, state.takenUpgrades, 3);
   state.phase = 'upgrade';
   sfx.upgrade();
@@ -166,6 +198,10 @@ function updatePlaying(dt) {
     if (state.comboTimer <= 0) { state.combo = 0; state.multiplier = 1; }
   }
 
+  state.streakTimer = Math.max(0, state.streakTimer - dt);
+  if (!state.streakTimer) state.streak = 0;
+  state.blazing = state.combo >= 12 && state.comboTimer > 0;
+  state.redFlash = Math.max(0, (state.redFlash || 0) - dt);
   updatePlayer(state.player, input, dt, state);
   updateWave(state.waveObj, state.enemies, state.player, dt, state, state.rng);
   updateEnemies(state.enemies, state.player, dt, state);
@@ -175,6 +211,13 @@ function updatePlaying(dt) {
   updateParticles(state.particles, state.floats, dt);
   reapDead(state.enemies, state.embers, state.particles, state.floats, state, state.rng);
 
+  if (state.player.dead && state.player.secondWind && !state.player.reviveUsed) {
+    state.player.reviveUsed = true;
+    state.player.dead = false;
+    state.player.hp = state.player.maxHp * 0.5;
+    state.player.grace = 3;
+    state.banner = { text: 'SECOND WIND', sub: 'The lantern refuses the dark.', t: 3 };
+  }
   if (state.player.dead) {
     endRun(false);
     return;
@@ -187,6 +230,7 @@ function updatePlaying(dt) {
     addFloatText(state.floats, state.player.x, state.player.y - 40, 'An ember finds you…', '#ff9a3d');
   }
   if (waveCleared(state.waveObj, state.enemies)) {
+    if (state.wave % 6 === 0) state.stats.nightsCleared += 1;
     state.score += WAVE_CLEAR_BONUS;
     addFloatText(state.floats, state.player.x, state.player.y - 50, `WAVE CLEAR +${WAVE_CLEAR_BONUS}`, '#ffd97a');
     if (state.wave >= WAVES_TOTAL && !state.endless) {
@@ -244,12 +288,17 @@ function frame(now) {
 
   if (state.phase === 'title') updateTitle(dt);
   else if (state.phase === 'playing') updatePlaying(dt);
+  else if (state.phase === 'shop') {
+    for(let i=0;i<10;i++) if(input.pressed('Digit'+((i+1)%10))) buy(state,i);
+    if(input.pressed('Enter')) { startWave(state.wave+1); state.phase='playing'; state.player.fuel=state.player.maxFuel; }
+  }
   else if (state.phase === 'upgrade') updateUpgrade(dt);
   else if (state.phase === 'paused') {
     if (input.pressed('KeyP') || input.pressed('Escape') || input.mouse.clicked) state.phase = 'playing';
   } else updateEnd(dt);
 
   render(ctx, state);
+  if(state.phase==='shop') drawShop(ctx,state);
   input.endFrame();
   requestAnimationFrame(frame);
 }
@@ -261,6 +310,7 @@ const shot = params.get('shot');
 if (shot) {
   applyShot(state, shot, seed, { startRun, startWave, openUpgrade });
   render(ctx, state);
+  if(state.phase==='shop') drawShop(ctx,state);
 } else if (params.get('selftest')) {
   runSelfTest();
 } else {
@@ -333,6 +383,13 @@ export function runSelfTest() {
     out.checks.wave1_cleared = state.phase === 'upgrade' || waveCleared(state.waveObj, state.enemies);
     out.checks.kills = state.kills;
     out.checks.score = state.score;
+    out.checks.stats_tracking = Object.keys(state.stats.killsByType).length > 0
+      && state.stats.embersCollected >= 0 && state.stats.damageDealt > 0;
+    const resumePhase = state.phase;
+    state.phase = 'paused';
+    render(ctx, state);
+    state.phase = resumePhase;
+    done('pause_render');
     // 2) Upgrade choice applies.
     if (state.phase === 'upgrade') {
       const snap = (p) => [p.lightRadius, p.flareDamage, p.speedMul, p.fuelDrainMul, p.pickupMul, p.burnDps, p.twinFlare, p.hp, p.fuel].join('|');
@@ -345,8 +402,8 @@ export function runSelfTest() {
       done('upgrade_screen_reached');
     }
     // 3) Boss spawns on wave 5 and can be damaged.
-    state.wave = 5;
-    state.waveObj = buildWave(5, state.rng);
+    state.wave = 6;
+    state.waveObj = buildWave(6, state.rng);
     state.enemies = [];
     for (let i = 0; i < 3600 && !state.enemies.some((e) => e.boss); i++) step(1 / 60);
     const boss = state.enemies.find((e) => e.boss);
@@ -380,8 +437,55 @@ export function runSelfTest() {
       pickUpgrade(0);
     }
     out.checks.victory_phase = state.phase === 'victory';
+    render(ctx, state);
+    done('victory_stats_render');
+    startRun();
+    const p=state.player;
+    const fake={moveVector:()=>({x:1,y:0}),pressed:()=>false};
+    out.checks.dash= dash(p,fake) && p.grace===0.25 && !dash(p,fake);
+    const target=makeEnemy('hulk',400,400,1); state.enemies=[target]; p.nova=100;
+    const hp=target.hp; nova(p,state);
+    out.checks.nova=target.hp<hp && state.braziers.every(b=>b.lit);
+    state.wave=6; openUpgrade(); state.currency=30;
+    const before=p.maxHp; buy(state,0);
+    out.checks.shop=state.phase==='shop' && p.maxHp>before;
+    startWave(7); state.phase='playing';
+    out.checks.night2=state.night===2;
+    state.waveObj=buildWave(12,state.rng); state.waveObj.queue=[]; state.enemies=[];
+    updateWave(state.waveObj,state.enemies,p,0.1,state,state.rng);
+    out.checks.tide=state.enemies[0]?.night===2;
+    state.night=3; p.x=450;p.y=300; p.fuel=100;
+    updateAbilities(p,fake,1,state);
+    out.checks.dark_zone=p.fuel===94;
+    const elite = makeEnemy('shade', 500, 500, 1, true);
+    const normal = makeEnemy('shade', 500, 500, 1);
+    out.checks.elite = elite.elite && elite.hp === normal.hp * 3;
+    const a = makeEnemy('hulk', 300, 200, 1);
+    const b = makeEnemy('hulk', 340, 200, 1);
+    const flare = { x: 280, y: 200, vx: 200, vy: 0, life: 1, damage: 10, blast: 10, piercing: true };
+    updateFlares([flare], [a,b], 0.1, state);
+    updateFlares([flare], [a,b], 0.2, state);
+    out.checks.piercing = a.hp === a.maxHp - 10 && b.hp === b.maxHp - 10;
+    const raging = makeBoss(900, 600, 6);
+    raging.hp = raging.maxHp * 0.49;
+    state.enemies = [raging];
+    updateEnemies(state.enemies,p,0.01,state);
+    out.checks.enrage = raging.enraged && raging.enrageAttacks === 1;
+    state.currency = 100;
+    buy(state,6);
+    out.checks.fifth_brazier = state.braziers.length === 5;
+    state.streak = 3;
+    const money = state.currency;
+    const ember = () => ({x:p.x,y:p.y,vx:0,vy:0,life:9,bob:0});
+    updateEmbers([ember(),ember()],p,0,state);
+    out.checks.streak = state.currency > money + 2;
+    startEnvironment(state,2);
+    p.fuel=p.maxFuel;
+    p.x=state.fogBanks[0].x; p.y=state.fogBanks[0].y;
+    out.checks.fog = effectiveRadius(p,state) === p.lightRadius * 0.5;
     // 6) A frame renders without throwing.
     render(ctx, state);
+  if(state.phase==='shop') drawShop(ctx,state);
     done('render_ok');
     out.ok = Object.values(out.checks).every((v) => v === true || (typeof v === 'number' && v >= 0));
   } catch (err) {
@@ -393,4 +497,5 @@ export function runSelfTest() {
   if (log) log.textContent = text;
   // Keep rendering the final state so a screenshot shows it too.
   render(ctx, state);
+  if(state.phase==='shop') drawShop(ctx,state);
 }

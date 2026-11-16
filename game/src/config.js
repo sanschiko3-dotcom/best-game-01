@@ -98,16 +98,17 @@ export const BRAZIER_HEAL = 2.5; // hp per second while standing in its light
 export const EMBER_FUEL = 12; // fuel restored by one ember
 export const EMBER_SCORE = 25;
 
-export const WAVES_TOTAL = 10; // survive wave 10 and dawn breaks: you win
-export const BOSS_WAVES = [5, 10];
+export const WAVES_TOTAL = 18; // survive wave 10 and dawn breaks: you win
+export const BOSS_WAVES = [6, 12, 18];
 export const WAVE_CLEAR_BONUS = 150;
 export const COMBO_WINDOW = 3; // seconds; kills inside it raise the multiplier
 export const COMBO_MAX = 5;
 
 // Wave composition: count grows, the mix hardens, hulks and spitters
 // join from wave 2 and 3. Boss waves add a boss on top of a small escort.
-export function waveComp(n) {
-  const comp = { shade: 4 + n * 2, wisp: n >= 2 ? 2 + n : 0, hulk: 0, spitter: 0 };
+function baselineWaveComp(n) {
+  const local = (n - 1) % 6 + 1;
+  const comp = { stalker: n >= 3 ? 2 : 0, splitter: n >= 7 ? 2 : 0, siphon: n >= 7 ? 2 : 0, shade: 4 + n * 2, wisp: n >= 2 ? 2 + n : 0, hulk: 0, spitter: 0 };
   if (n >= 3) comp.hulk = Math.floor((n - 1) / 2);
   if (n >= 4) comp.spitter = n - 2;
   if (BOSS_WAVES.includes(n)) {
@@ -120,4 +121,26 @@ export function waveComp(n) {
 export function enemyScale(n) {
   // Enemies get tougher as the night deepens: +12% hp, +4% speed per wave.
   return { hp: 1 + 0.12 * (n - 1), speed: 1 + 0.04 * (n - 1) };
+}
+
+Object.assign(ENEMIES, {
+ stalker: {name:'Stalker',hp:38,speed:120,radius:14,damage:12,score:110,emberChance:0.8,colour:'#a3b3c9'},
+ splitter: {name:'Splitter',hp:55,speed:65,radius:20,damage:12,score:140,emberChance:0.8,colour:'#67d8b3'},
+ siphon: {name:'Siphon',hp:65,speed:90,radius:16,damage:8,score:160,emberChance:1,colour:'#e371cc'}
+});
+
+// Later nights replace the baseline with threats suited to their terrain.
+export function waveComp(n, night = Math.min(3, Math.ceil(n / 6))) {
+  const mix = baselineWaveComp(n);
+  if (night === 1) return mix;
+  if (night === 2) {
+    mix.wisp = (mix.wisp || 0) + 5;
+    mix.spitter = (mix.spitter || 0) + 3;
+    mix.shade = Math.max(2, (mix.shade || 0) - 4);
+  } else {
+    mix.stalker = (mix.stalker || 0) + 4;
+    mix.siphon = (mix.siphon || 0) + 3;
+    mix.splitter = (mix.splitter || 0) + 3;
+  }
+  return mix;
 }

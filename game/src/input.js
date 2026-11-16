@@ -24,9 +24,11 @@ export function createInput(canvas) {
   window.addEventListener('keyup', (e) => keys.delete(e.code));
   window.addEventListener('blur', () => { keys.clear(); mouse.down = false; });
 
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('mousemove', toCanvas);
   canvas.addEventListener('mousedown', (e) => {
     toCanvas(e);
+    if(e.button===2) { justPressed.add('Dash'); return; }
     mouse.down = true;
     mouse.clicked = true;
   });
@@ -47,7 +49,7 @@ export function createInput(canvas) {
     },
     pressed(code) { return justPressed.has(code); },
     // Space or a mouse click fires a flare; both are checked by the player.
-    fireHeld() { return mouse.down || keys.has('Space'); },
+    fireHeld() { return mouse.down; },
     fireClicked() {
       const c = mouse.clicked || justPressed.has('Space');
       return c;

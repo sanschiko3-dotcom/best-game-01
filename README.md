@@ -2,15 +2,11 @@
 [![rank](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-# LUMENWARDEN — Make the best game (best-game-01)
+# LUMENWARDEN v2 — Make the best game (best-game-01)
 
 **Keep the last lantern burning through the Long Night.**
 
-An original arena-survival game in which light is both your weapon and
-your lifeline. The dark sends its shadows in 10 waves; your lantern's
-glow burns them, your flare bolts blast them, and the embers they drop
-are the only fuel that keeps your light alive. Survive to dawn — Wave
-10 brings the Gloam King — then keep going into the Endless Night.
+An arena survival campaign across three nights, each with five waves and a boss. Light burns enemies, fuel sustains the lantern, and collected embers fund permanent upgrades at dawn. Survive the Gloam Queen to unlock endless play.
 
 ## How to play
 
@@ -18,7 +14,7 @@ are the only fuel that keeps your light alive. Survive to dawn — Wave
 |---|---|
 | WASD / arrow keys | Move the Warden |
 | Mouse | Aim the lantern |
-| Click / Space (hold) | Fire a flare bolt (costs fuel) |
+| Click (hold) | Fire a flare bolt (costs fuel) |
 | E (near a brazier) | Light a brazier — 10 fuel for a permanent burning circle |
 | 1 / 2 / 3 or click | Choose a blessing between waves |
 | P / Esc | Pause · M mute · R restart after the end |
@@ -86,3 +82,36 @@ headless Chrome via CDP — no edits, no composites.
 ## License
 
 MIT — see `LICENSE` (first line: `SPDX-License-Identifier: MIT`).
+
+## Three Nights of the Long Dark
+
+Five waves and a boss guard each dawn: Ember Fields, Drowned Hollow, and Gloam Citadel. Spend collected ember currency on six permanent upgrades between nights. Shift or right-click dashes with brief invulnerability and a burning trail. Q or Space detonates a fully charged Dawn Nova. Stalkers hide outside light; splitters release wisps; siphons steal fuel. The Hollow Tide summons rings of wisps, while the Gloam Queen teleports to extinguish braziers. Fog reduces lantern reach in night two, and cursed ground drains fuel in night three. Survive all three nights to unlock endless play.
+
+## V2 systems
+
+| Input | Action |
+|---|---|
+| Shift / right-click | Dash with a burning trail |
+| Q / Space | Release a fully charged nova |
+| 1–9 / 0 | Buy one of ten dawn-shop items |
+| Enter | Leave the shop |
+
+Night two adds drifting fog banks that halve light while you stand inside,
+with waves favouring wisps and spitters. Night three favours stalkers,
+siphons and splitters; cursed patches drain six fuel per second and summon
+distant shades. Each patch supports at most two living shades.
+
+Elite enemies begin on the second wave of each night. Their gold crown
+marks triple health, double score and three guaranteed ember drops. The
+chance starts at eight percent and increases by two points each night.
+Bosses enrage below half health, moving forty percent faster and gaining
+a crown burst, double wisp ring, or rapid teleport and splitter fountain.
+
+Collect embers within 2.5 seconds to build a flame streak. Every four
+pickups increase currency per ember, capped at five. Ember Greed extends
+the window and adds another currency bonus every three streak pickups.
+Twelve chained kills ignite BLAZING, granting a golden aura and twenty-five
+percent more flare damage until the kill combo expires.
+
+The ten-item shop includes true piercing Sunlance, a fifth central brazier,
+a once-per-night Second Wind revival, and Frost Lantern's slowing light.

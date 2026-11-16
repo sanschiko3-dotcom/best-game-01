@@ -72,10 +72,12 @@ export function applyShot(state, shot, seed, hooks) {
     return;
   }
 
+  if(shot==='shop') { state.phase='shop';state.currency=24;state.wave=6;return; }
   if (shot === 'boss') {
+    state.night=3;
     // Wave 10: the Gloam King has awakened, escort shades around him,
     // the Warden's lantern low but burning, boss bar on screen.
-    state.wave = 10;
+    state.wave = 18;
     state.score = 12480;
     state.kills = 96;
     state.player.x = VIEW.w / 2;
@@ -85,7 +87,7 @@ export function applyShot(state, shot, seed, hooks) {
     state.player.aim = -Math.PI / 2;
     state.braziers[0].lit = true;
     state.braziers[1].lit = true;
-    const boss = makeBoss(VIEW.w / 2, 350, 10);
+    const boss = makeBoss(VIEW.w / 2, 350, 18);
     boss.hp = boss.maxHp * 0.62; // already bloodied: a real fight
     state.enemies.push(boss);
     for (const [x, y] of [[420, 380], [860, 380], [300, 520], [980, 520]]) {
@@ -93,7 +95,7 @@ export function applyShot(state, shot, seed, hooks) {
     }
     state.enemies.push(makeEnemy('wisp', 640, 470, 10));
     state.waveObj = { n: 10, queue: [], spawnTimer: 0, spawnGap: 1, bossSpawned: true, bossAt: true };
-    state.banner = { text: 'THE GLOAM KING AWAKENS', sub: 'Break his crown of dark', t: 2.2 };
+    state.banner = { text: 'THE GLOAM QUEEN AWAKENS', sub: 'Break her crown of dark', t: 2.2 };
     spawnBurst(state.particles, VIEW.w / 2, 350, '#ff4d6d', 20, 220);
     state.t = 2.0;
     return;

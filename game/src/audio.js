@@ -78,6 +78,11 @@ function noise(dur, vol = 0.15, filterFreq = 1200, delay = 0) {
 }
 
 export const sfx = {
+  dash() { noise(0.22, 0.18, 3500); tone(440, 0.18, 'sine', 0.1, 110); },
+  nova() { noise(0.9, 0.3, 2200); tone(70, 0.8, 'triangle', 0.3, 25); },
+  enrage() { tone(120, 0.6, 'sawtooth', 0.25, 45); tone(155, 0.5, 'square', 0.12); },
+  shopBuy() { [660, 880, 1320].forEach((f,i) => tone(f, 0.2, 'sine', 0.14, null, i * 0.08)); },
+  eliteSpawn() { tone(740, 0.35, 'triangle', 0.12, 370); },
   flare() { tone(880, 0.16, 'sine', 0.16, 220); noise(0.12, 0.08, 3200); },
   hit() { tone(220, 0.08, 'square', 0.1, 140); },
   kill() { tone(520, 0.18, 'triangle', 0.16, 90); noise(0.15, 0.1, 900); },
