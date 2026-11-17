@@ -1,3 +1,4 @@
+import { grantRelic } from './relics.js';
 // SPDX-License-Identifier: MIT
 // LUMENWARDEN — shots.js
 // One job: the deterministic demo states behind ?shot=….
@@ -7,7 +8,7 @@
 // The four shots mirror the four screenshots/ files:
 //   title   — the title screen over drifting shadows
 //   action  — mid-wave 4, lantern lit, shadows closing in
-//   upgrade — the three-blessing choice after a cleared wave
+//   upgrade — the two-relic choice after a boss wave
 //   boss    — wave 10, the Gloam King on screen with his health bar
 
 import { VIEW } from './config.js';
@@ -26,7 +27,7 @@ export function applyShot(state, shot, seed, hooks) {
   if (shot === 'action') {
     // Jump to wave 4, mid-fight: a full arena, braziers lit, embers
     // on the ground, flares in the air, score already ticking.
-    state.wave = 4;
+    state.wave = 27;state.night=5;state.player.mirrorRack=1;state.mirrors=[{x:780,y:345,angle:.7,hp:40},{x:900,y:450,angle:2,hp:40}];state.beam=[[{x:640,y:440},{x:780,y:345}],[{x:780,y:345},{x:900,y:450}]];
     state.score = 2840;
     state.kills = 31;
     state.combo = 3;
@@ -39,7 +40,7 @@ export function applyShot(state, shot, seed, hooks) {
     state.braziers[0].lit = true;
     state.braziers[3].lit = true;
     const spots = [
-      ['shade', 420, 300], ['shade', 880, 260], ['shade', 760, 520],
+      ['webweaver', 420, 300], ['fuelmite', 880, 260], ['shade', 760, 520],
       ['shade', 300, 560], ['wisp', 560, 220], ['wisp', 980, 460],
       ['wisp', 180, 380], ['hulk', 1050, 560], ['spitter', 200, 220],
       ['shade', 640, 640], ['shade', 980, 640], ['wisp', 420, 640],
@@ -53,7 +54,7 @@ export function applyShot(state, shot, seed, hooks) {
     }
     spawnBurst(state.particles, 700, 380, '#ffd97a', 10, 200);
     spawnBurst(state.particles, 880, 260, '#ffb347', 8, 160);
-    state.banner = { text: 'WAVE 4', sub: 'Hold the light.', t: 1.8 };
+    state.banner = { text: 'WAVE 27', sub: 'Reflect the shattered sun.', t: 1.8 };
     state.t = 2.0;
     return;
   }
@@ -68,17 +69,17 @@ export function applyShot(state, shot, seed, hooks) {
     state.braziers[1].lit = true;
     state.enemies = [];
     state.waveObj = { n: 3, queue: [], spawnTimer: 0, spawnGap: 1, bossSpawned: false, bossAt: false };
-    hooks.openUpgrade();
+    grantRelic(state);
     state.t = 2.0;
     return;
   }
 
   if(shot==='shop') { state.phase='shop';state.currency=24;state.wave=6;return; }
   if (shot === 'boss') {
-    state.night=3;
+    state.night=5;
     // Wave 10: the Gloam King has awakened, escort shades around him,
     // the Warden's lantern low but burning, boss bar on screen.
-    state.wave = 18;
+    state.wave = 30;
     state.score = 12480;
     state.kills = 96;
     state.player.x = VIEW.w / 2;
@@ -88,7 +89,10 @@ export function applyShot(state, shot, seed, hooks) {
     state.player.aim = -Math.PI / 2;
     state.braziers[0].lit = true;
     state.braziers[1].lit = true;
-    const boss = makeBoss(VIEW.w / 2, 350, 18);
+    const boss = makeBoss(VIEW.w / 2, 350, 30);
+    boss.sweep = 0;
+    boss.sweepTime = 0.4;
+    boss.sweepAngle = Math.PI / 2;
     boss.hp = boss.maxHp * 0.62; // already bloodied: a real fight
     state.enemies.push(boss);
     for (const [x, y] of [[420, 380], [860, 380], [300, 520], [980, 520]]) {
@@ -96,7 +100,7 @@ export function applyShot(state, shot, seed, hooks) {
     }
     state.enemies.push(makeEnemy('wisp', 640, 470, 10));
     state.waveObj = { n: 10, queue: [], spawnTimer: 0, spawnGap: 1, bossSpawned: true, bossAt: true };
-    state.banner = { text: 'THE GLOAM QUEEN AWAKENS', sub: 'Break her crown of dark', t: 2.2 };
+    state.banner = { text: 'THE SHATTERED REGENT AWAKENS', sub: 'Shatter the broken crown', t: 2.2 };
     spawnBurst(state.particles, VIEW.w / 2, 350, '#ff4d6d', 20, 220);
     state.t = 2.0;
     return;

@@ -7,6 +7,18 @@
 
 export const UPGRADES = [
   {
+    id: 'shatteredFocus',
+    name: 'Shattered Focus',
+    glyph: '✧',
+    desc: '+25% beam DPS and +40 beam length.',
+    apply(p) {
+      p.beamMul = (p.beamMul || 1) * 1.25;
+      p.beamLengthBonus = (p.beamLengthBonus || 0) + 40;
+    },
+  },
+{id:'prism',name:'Prism Shard',glyph:'◇',desc:'+1 mirror',once:true,apply(p){p.prismShard=1;}},
+{id:'focus',name:'Focused Beam',glyph:'↗',desc:'+35% beam DPS',apply(p){p.beamMul=(p.beamMul||1)*1.35;}},
+  {
     id: 'wide', name: 'Wide Glow', glyph: '◎',
     desc: '+30% lantern light radius. Your safe circle grows.',
     apply(p) { p.lightRadius *= 1.3; },

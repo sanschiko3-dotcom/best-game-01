@@ -2,11 +2,21 @@
 [![rank](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/sanschiko3-dotcom/best-game-01/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-# LUMENWARDEN v3 — Make the best game (best-game-01)
+# LUMENWARDEN v4 — The Shattered Dawn — Make the best game (best-game-01)
 
 **Keep the last lantern burning through the Long Night.**
 
-An arena survival campaign across three nights, each with five waves and a boss. Light burns enemies, fuel sustains the lantern, and collected embers fund permanent upgrades at dawn. Survive the Gloam Queen to unlock endless play — and past the dawn, the Hollow Dawn answers.
+An arena survival campaign across five nights, each with five waves and a boss. Light burns enemies, fuel sustains the lantern, and collected embers fund permanent upgrades at dawn. Survive the Shattered Regent on wave 30 to break the dawn — and past the dawn, the Endless Night deepens every six waves.
+
+## What's new in v4 — The Shattered Dawn
+
+- **Night 5: The Shattered Dawn.** The campaign now runs 30 waves over five nights. Night 5 breaks the hollow moon into shards of gold and violet — its own palette, its own mix — and ends with a new final boss. Victory comes at wave 30; endless play continues after.
+- **Prism mirrors — bend the lantern beam.** Press **R** to place a glass mirror at the Warden's feet, **T** to rotate the nearest mirror. The lantern beam fires along your aim and reflects off mirrors, burning every shadow it touches. Hulks smash mirrors they touch, so placement matters — and the Regent's pulse shatters them all.
+- **Relics — four game-changers.** After every boss wave (6, 12, 18, 24, 30) choose 1 of 2 relics: **Emberheart** (beam +60%, burn +25%), **Moonshard Lens** (+1 mirror, +1 beam bounce), **Wisp Crown** (a companion wisp orbits you and fires on its own), **Hollow Fang** (every kill restores 3 fuel). Relics stack across the run and show in the HUD.
+- **New boss: The Shattered Regent (wave 30).** A telegraphed rotating beam sweep, shard summons (fuelmites + webweavers), and a mirror-break pulse every 12 seconds. Enrages below half health like the other crown-bearers.
+- **New enemies.** **Webweavers** lay snare webs that slow the Warden and shoot slowing web bolts (waves 19+). **Fuelmites** are fast kamikazes: a 0.5s flashing fuse, then an explosion that hurts and drains 12 fuel (waves 25+).
+- **Deeper workshop.** The Dawn Shop gains tiered prism gear — Mirror Rack (+1 mirror, two tiers), Polished Glass (+40% beam damage, three levels), Quick Pivot (+80 beam length, two levels) — and a Relic Cache (30e, once per run) that grants a random unowned relic. Wave-clear blessings gain Prism Shard (+1 mirror), Focused Beam (+35% beam damage) and Shattered Focus.
+- **Run report.** The end screen now lists nights survived, beacons lit, braziers placed, relics taken, mirrors placed, embers banked, best endless wave, and flares fired — and the best endless wave persists between runs.
 
 ## v3 — The Hollow Dawn
 
@@ -25,20 +35,24 @@ An arena survival campaign across three nights, each with five waves and a boss.
 | WASD / arrow keys | Move the Warden |
 | Mouse | Aim the lantern |
 | Click (hold) | Fire a flare bolt (costs fuel) |
+| R | Place a prism mirror (beam reflects off it) |
+| T | Rotate the nearest mirror +45° |
 | E (near a brazier) | Light a brazier — 10 fuel for a permanent burning circle |
-| 1 / 2 / 3 or click | Choose a blessing between waves |
+| 1 / 2 / 3 or click | Choose a blessing between waves; 1 / 2 for a relic after a boss |
 | P / Esc | Pause · M mute · R restart after the end |
 
 **Rules, in one paragraph:** shadows inside your lantern's glow (or a
-lit brazier's light) take steady burn damage; flare bolts explode on
+lit brazier's light) take steady burn damage; the lantern beam burns
+everything it touches along its reflected path; flare bolts explode on
 impact; kills drop embers that refill fuel and raise a combo multiplier
-(up to ×5); fuel always drains, so you must keep hunting. Four enemy
-types — Shades (chasers), Wisps (fast darters), Hulks (tanks), Spitters
-(ranged) — plus the Gloam King boss on waves 5 and 10, who summons
-shades and fires radial bursts. Clear a wave to pick 1 of 3 blessings
-(wider light, twin flares, thicker wick, ember magnet, and more). Lose
-all HP and the light goes out; clear wave 10 and dawn breaks — you win,
-with an endless mode after.
+(up to ×5); fuel always drains, so you must keep hunting. Shades
+(chasers), Wisps (fast darters), Hulks (tanks), Spitters (ranged) —
+plus Webweavers (snares), Fuelmites (kamikaze), and a boss every sixth
+wave: the Gloam King, the Hollow Tide, the Gloam Queen, the Hollow King,
+and the Shattered Regent on wave 30. Clear a wave to pick 1 of 3 blessings
+(wider light, twin flares, thicker wick, ember magnet, prism shard, and
+more); clear a boss wave to pick a relic. Lose all HP and the light goes
+out; clear wave 30 and dawn breaks — you win, with an endless mode after.
 
 ## Tech
 
@@ -61,8 +75,10 @@ with an endless mode after.
 | `game/src/input.js` | Keyboard + mouse state |
 | `game/src/audio.js` | Synthesised sound effects + ambient drone |
 | `game/src/entities.js` | Player, enemies, flares, bolts, embers, braziers, collisions |
+| `game/src/prism.js` | Prism mirrors, lantern beam, webs, fuelmites, Regent attacks |
+| `game/src/relics.js` | The four relics, boss-wave grants, companion wisp |
 | `game/src/waves.js` | Wave composition and spawning |
-| `game/src/upgrades.js` | The 8 between-wave blessings |
+| `game/src/upgrades.js` | The between-wave blessings |
 | `game/src/render.js` | All drawing: world, darkness-with-light, HUD, menus |
 | `game/src/shots.js` | Deterministic `?shot=` demo states for the screenshots |
 | `game/src/main.js` | State machine, loop, and the `?selftest=1` harness |
@@ -71,21 +87,21 @@ with an endless mode after.
 
 ## Screenshots
 
-`1-title.jpg` title screen, `2-action.jpg` mid-wave 4, `3-upgrade.jpg`
-the blessing choice, `4-boss.jpg` the Wave 10 boss fight. All four are
+`1-title.jpg` title screen, `2-action.jpg` mid-wave 27 (Night 5, beam
+bouncing across mirrors), `3-upgrade.jpg` the relic choice after a boss,
+`4-boss.jpg` the Wave 30 Shattered Regent fight. All four are
 real renders of the game's own code (`?shot=…&seed=7`), taken in
 headless Chrome via CDP — no edits, no composites.
 
-## Verification (local, 2026-11-16)
+## Verification (local, 2026-11-17)
 
 - `node --check` passes on every `game/src/*.js`.
-- `?selftest=1` in headless Chrome: **SELFTEST PASS** — 14 checks, 0
+- `?selftest=1` in headless Chrome: **SELFTEST PASS** — 92 checks, 0
   console errors (wave spawns and clears, upgrade applies and returns
-  to play, boss spawns and takes damage, death → game over, wave 10
-  clear → victory, a frame renders).
-- Live play-test with real CDP input events (click to start, WASD +
-  mouse-aimed flares): no console errors; play-test screenshot shows
-  wave 1 in progress with the player firing.
+  to play, boss spawns and takes damage, death → game over, wave 30
+  clear → victory, prism beam damage + bounce, mirror smash, relic
+  grant + companion, web snare, fuelmite explosion, Regent pulse +
+  sweep, a frame renders).
 - `MAKEFUN_OUTPUT_DIR=out node main.ts` builds the dossier; two runs
   produce byte-identical output (see `dossier.json`).
 
@@ -134,4 +150,10 @@ a once-per-night Second Wind revival, and Frost Lantern's slowing light.
 - Bank embers in the permanent Ember Vault between runs.
 - Mirror Wraiths reflect flares; Lantern Thieves douse defensive flames.
 - Face the Hollow King and track your best endless wave.
+# v4 — The Shattered Dawn
 
+- Night 5 with its own gold-violet palette and the Shattered Regent as final boss; campaign victory at wave 30.
+- Prism mirrors bend the lantern beam; hulks smash them, the Regent's pulse shatters them all.
+- Four relics granted after boss waves: Emberheart, Moonshard Lens, Wisp Crown, Hollow Fang.
+- Webweavers lay slowing snares; Fuelmites explode after a flashing fuse.
+- Tiered prism gear in the Dawn Shop plus a Relic Cache; three new wave-clear blessings.

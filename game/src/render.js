@@ -1,3 +1,5 @@
+import { capacity } from './prism.js';
+import { ownedRelics } from './relics.js';
 // SPDX-License-Identifier: MIT
 // LUMENWARDEN — render.js
 // One job: everything the player sees, drawn on one canvas.
@@ -231,7 +233,40 @@ function drawEnemy(ctx, e, t) {
   ctx.beginPath(); ctx.arc(e.x, e.y, e.radius * 2.6, 0, Math.PI * 2); ctx.fill();
   ctx.save();
   ctx.translate(e.x, e.y);
-  if (e.type === 'shade') {
+  if (e.type === 'webweaver') {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + Math.sin(t * 5) * 0.1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * 22, Math.sin(a) * 18);
+      ctx.lineTo(Math.cos(a) * 29, Math.sin(a) * 26 + 5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 13, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff2ff';
+    ctx.beginPath();
+    ctx.arc(0, 6, 7, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (e.type === 'fuelmite') {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#b46d26';
+    ctx.beginPath();
+    ctx.moveTo(-4, -8);
+    ctx.lineTo(4, -18);
+    ctx.stroke();
+    ctx.fillStyle = '#fff8d0';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3 + Math.sin(t * 20), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (e.type === 'shade') {
     // A smoky blob with two burning eyes.
     const wob = 1 + 0.06 * Math.sin(t * 5 + e.wobble);
     ctx.scale(wob, 1 / wob);
@@ -376,6 +411,189 @@ function drawPlayer(ctx, p, t) {
   }
 }
 
+
+// Beam layers share geometry, keeping the hot core aligned at reflections.
+function drawBeam(ctx, state, t) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  const layers = [
+    { width: 28, colour: '#aa86ff', alpha: 0.08 },
+    { width: 13, colour: '#ffd785', alpha: 0.22 },
+    { width: 4, colour: '#fff6cb', alpha: 0.75 + Math.sin(t * 13) * 0.15 },
+  ];
+  for (const layer of layers) {
+    ctx.lineWidth = layer.width;
+    ctx.strokeStyle = layer.colour;
+    ctx.globalAlpha = layer.alpha;
+    for (const [a, b] of state.beam || []) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffffff';
+  for (const [, b] of (state.beam || []).slice(0, -1)) {
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 2 / 5 + t * 2;
+      const distance = 4 + Math.sin(t * 7 + i) * 3;
+      ctx.beginPath();
+      ctx.arc(b.x + Math.cos(angle) * distance,
+        b.y + Math.sin(angle) * distance, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawGlassShard(ctx, mirror, t, ghost = false) {
+  ctx.save();
+  ctx.translate(mirror.x, mirror.y);
+  ctx.rotate(mirror.angle);
+  ctx.globalAlpha = ghost ? 0.25 : 0.9;
+  ctx.fillStyle = '#b4e5ff';
+  ctx.strokeStyle = '#f4fbff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-30, -3);
+  ctx.lineTo(20, -6);
+  ctx.lineTo(30, 3);
+  ctx.lineTo(-20, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-20, 6);
+  ctx.lineTo(0, -4);
+  ctx.lineTo(20, 3);
+  ctx.stroke();
+  if (mirror.hp < 40) {
+    ctx.strokeStyle = '#4d648e';
+    ctx.beginPath();
+    ctx.moveTo(-5, -5);
+    ctx.lineTo(3, 0);
+    ctx.lineTo(-2, 5);
+    ctx.moveTo(3, 0);
+    ctx.lineTo(14, 4);
+    ctx.stroke();
+  }
+  const glint = Math.sin(t * 2 + mirror.x) * 23;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(glint, -4, 2, 8);
+  ctx.restore();
+}
+
+function drawMirrors(ctx, state, t) {
+  for (const mirror of state.mirrors || []) drawGlassShard(ctx, mirror, t);
+  if (state.player && state.phase === 'playing' &&
+      (state.mirrors || []).length < capacity(state)) {
+    drawGlassShard(ctx, {
+      x: state.player.x,
+      y: state.player.y,
+      angle: state.player.aim + Math.PI / 4,
+      hp: 40,
+    }, t, true);
+  }
+}
+
+function drawWebs(ctx, state, t) {
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (const web of state.webs || []) {
+    ctx.globalAlpha = Math.min(0.65, web.life / 2);
+    ctx.strokeStyle = '#d3c5ee';
+    ctx.beginPath();
+    for (const radius of [24, 46, 70]) {
+      ctx.moveTo(web.x + radius, web.y);
+      ctx.arc(web.x, web.y, radius, 0, Math.PI * 2);
+    }
+    for (let i = 0; i < 8; i++) {
+      const angle = i * Math.PI / 4;
+      ctx.moveTo(web.x, web.y);
+      ctx.lineTo(web.x + Math.cos(angle) * 70,
+        web.y + Math.sin(angle) * 70);
+    }
+    ctx.stroke();
+  }
+  if (state.player?.webSlow > 0) {
+    ctx.globalAlpha = 0.5 + Math.sin(t * 8) * 0.2;
+    ctx.strokeStyle = '#eee0ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y, 21, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCompanion(ctx, state, t) {
+  if (!state.companion) return;
+  ctx.save();
+  const wisp = state.companion;
+  for (let i = 5; i >= 0; i--) {
+    ctx.globalAlpha = (6 - i) / 8;
+    ctx.fillStyle = '#b7f2ff';
+    ctx.beginPath();
+    ctx.arc(wisp.x - Math.cos(t * 2 - i * 0.12) * i * 3,
+      wisp.y - Math.sin(t * 2 - i * 0.12) * i * 3,
+      6 - i * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawRegentFx(ctx, state, t) {
+  ctx.save();
+  for (const enemy of state.enemies) {
+    if (enemy.sweepTime > 0) {
+      const warning = enemy.sweepTime < 0.8;
+      ctx.setLineDash(warning ? [12, 10] : []);
+      ctx.strokeStyle = warning ? '#e4b8ff' : '#ffe185';
+      ctx.lineWidth = warning ? 2 : 26;
+      ctx.globalAlpha = warning ? 0.6 + Math.sin(t * 20) * 0.3 : 0.8;
+      ctx.beginPath();
+      ctx.moveTo(enemy.x, enemy.y);
+      ctx.lineTo(enemy.x + Math.cos(enemy.sweepAngle) * 1100,
+        enemy.y + Math.sin(enemy.sweepAngle) * 1100);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (enemy.fuse !== undefined) {
+      ctx.globalAlpha = 0.6 + Math.sin(t * 40) * 0.4;
+      ctx.fillStyle = '#fff7b0';
+      ctx.beginPath();
+      ctx.arc(enemy.x, enemy.y, 8 + Math.sin(t * 30) * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (enemy.boss && enemy.night >= 5) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffd884';
+      for (let i = 0; i < 7; i++) {
+        const angle = i * Math.PI / 6 + Math.PI;
+        const x = enemy.x + Math.cos(angle) * 49;
+        const y = enemy.y + Math.sin(angle) * 49;
+        ctx.beginPath();
+        ctx.moveTo(x - 5, y);
+        ctx.lineTo(x + Math.sin(t + i) * 3, y - 15);
+        ctx.lineTo(x + 5, y + 5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+  if (state.pulseRing > 0 && state.player) {
+    ctx.globalAlpha = state.pulseRing;
+    ctx.strokeStyle = '#e4c4ff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(state.player.x, state.player.y,
+      30 + (1 - state.pulseRing) * 650, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawWorld(ctx, state, t) {
   if (state.blazing) {
     ctx.strokeStyle = '#ffd45c';
@@ -393,6 +611,11 @@ function drawWorld(ctx, state, t) {
   }
   drawBackground(ctx, state, t);
   drawHollow(ctx,state,t);
+  drawBeam(ctx, state, t);
+  drawMirrors(ctx, state, t);
+  drawWebs(ctx, state, t);
+  drawCompanion(ctx, state, t);
+  drawRegentFx(ctx, state, t);
   for (const b of state.braziers) drawBrazier(ctx, b, t);
   for (const em of state.embers) drawEmber(ctx, em, t);
   for (const e of state.enemies) drawEnemy(ctx, e, t);
@@ -463,6 +686,18 @@ function drawHud(ctx, state) {
   ctx.font = 'bold 18px Georgia';
   ctx.textAlign = 'center';
   ctx.fillText(`FLAME STREAK ${state.streak || 0}${state.blazing ? ' · BLAZING' : ''}`, 640, 100);
+  ownedRelics(state).forEach((relic, i) => {
+    const x = 400 + i * 130;
+    ctx.fillStyle = 'rgba(80,60,110,.8)';
+    roundRect(ctx, x, 105, 122, 30, 6);
+    ctx.fill();
+    ctx.fillStyle = '#ead5ff';
+    ctx.font = '14px Georgia';
+    ctx.fillText(relic.glyph + ' ' + relic.name, x + 61, 125);
+  });
+  ctx.fillStyle = '#ccecff';
+  ctx.font = '18px Georgia';
+  ctx.fillText('◈ ' + (state.mirrors || []).length + '/' + capacity(state), 1120, 88);
   const p = state.player;
   ctx.textAlign = 'left';
   // Top bar.
@@ -470,19 +705,25 @@ function drawHud(ctx, state) {
   ctx.fillRect(0, 0, VIEW.w, 54);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '700 22px Georgia, serif';
-  // Campaign nights count down from 3; the Hollow Dawn (night 4) and
-  // the endless deep (night 5+) count up instead, so the label never
-  // reads "NIGHT 4/3" — the run has outgrown the campaign by then.
+  // Campaign nights count down from 3; the Hollow Dawn (night 4),
+  // the Shattered Dawn (night 5) and the endless deep (night 6+)
+  // count up instead, so the label never reads "NIGHT 4/3" — the run
+  // has outgrown the campaign by then. The "LONG NIGHT" tag is only
+  // drawn when it fits left of the centred score.
   const wt = waveTitle(Math.max(1, state.wave));
   const night = state.night || 1;
+  const dawnName = night === 4 ? 'HOLLOW DAWN' : night === 5 ? 'SHATTERED DAWN' : 'ENDLESS NIGHT';
   const nightLabel = night <= 3
     ? `NIGHT ${night}/3 — ${wt.wave}`
-    : `NIGHT ${night} · HOLLOW DAWN — ${wt.wave}`;
+    : `NIGHT ${night} · ${dawnName} — ${wt.wave}`;
   const nightLabelWidth = ctx.measureText(nightLabel).width;
   ctx.fillText(nightLabel, 18, 35);
   ctx.font = '600 17px Georgia, serif';
   ctx.fillStyle = PALETTE.textDim;
-  ctx.fillText(state.endless ? 'ENDLESS NIGHT' : 'THE LONG NIGHT', 18 + nightLabelWidth + 16, 34);
+  const tag = state.endless ? 'ENDLESS NIGHT' : 'THE LONG NIGHT';
+  if (18 + nightLabelWidth + 16 + ctx.measureText(tag).width < 500) {
+    ctx.fillText(tag, 18 + nightLabelWidth + 16, 34);
+  }
   ctx.textAlign = 'center';
   ctx.fillStyle = PALETTE.lanternHot;
   ctx.font = '700 24px Georgia, serif';
@@ -567,7 +808,7 @@ function drawHud(ctx, state) {
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(242,234,216,0.6)';
   ctx.font = '600 14px Georgia, serif';
-  ctx.fillText('WASD move · Mouse aim · Click / Space flare · E light brazier · P pause · M mute', VIEW.w / 2, VIEW.h - 12);
+  ctx.fillText('WASD move · Mouse aim · Click flare · Q/Space nova · R mirror · T rotate · E brazier · P pause', VIEW.w / 2, VIEW.h - 12);
 }
 
 function panel(ctx, x, y, w, h) {
@@ -594,7 +835,7 @@ function drawTitle(ctx, state, t) {
   ctx.fillText('LUMENWARDEN', VIEW.w / 2, 250);
   ctx.fillStyle = PALETTE.text;
   ctx.font = 'italic 600 24px Georgia, serif';
-  ctx.fillText('Carry the lantern through three nights.', VIEW.w / 2, 296);
+  ctx.fillText('Carry the lantern through five nights.', VIEW.w / 2, 296);
   panel(ctx, VIEW.w / 2 - 330, 340, 660, 208);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '600 18px Georgia, serif';
@@ -627,12 +868,12 @@ function drawUpgrade(ctx, state) {
   ctx.textAlign = 'center';
   ctx.fillStyle = PALETTE.lanternHot;
   ctx.font = '700 40px Georgia, serif';
-  ctx.fillText(`WAVE ${state.wave} CLEAR — DAWN IS CLOSER`, VIEW.w / 2, 150);
+  ctx.fillText(state.phase === 'relic' ? 'THE CROWN BREAKS — CHOOSE A RELIC' : `WAVE ${state.wave} CLEAR — DAWN IS CLOSER`, VIEW.w / 2, 150);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '600 20px Georgia, serif';
-  ctx.fillText('Choose one blessing for the next wave. Click a card, or press 1 / 2 / 3.', VIEW.w / 2, 188);
+  ctx.fillText('Choose a blessing or relic. Click a card or press its number.', VIEW.w / 2, 188);
   const cw = 300, ch = 240, gap = 30;
-  const total = cw * 3 + gap * 2;
+  const total = cw * state.choices.length + gap * (state.choices.length - 1);
   state.choices.forEach((u, i) => {
     const x = VIEW.w / 2 - total / 2 + i * (cw + gap);
     const y = 250;
@@ -659,6 +900,10 @@ function drawUpgrade(ctx, state) {
     ctx.fillText(line.trim(), x + cw / 2, ly);
     ctx.fillStyle = PALETTE.textDim;
     ctx.font = '700 16px Georgia, serif';
+    if (u.flavour) {
+      ctx.font = 'italic 12px Georgia';
+      ctx.fillText(u.flavour, x + cw / 2, y + 207);
+    }
     ctx.fillText(`[ ${i + 1} ]`, x + cw / 2, y + ch - 18);
   });
   ctx.fillStyle = PALETTE.textDim;
@@ -670,6 +915,8 @@ function drawUpgrade(ctx, state) {
 function runRows(state) {
   const stats = state.stats;
   return [
+    ['Relics taken', stats.relicsTaken || 0],
+    ['Mirrors placed', stats.mirrorsPlaced || 0],
     ['Nights cleared', stats.nightsCleared],
     ['Shadows banished', state.kills],
     ['Embers collected', stats.embersCollected],
@@ -711,7 +958,7 @@ function drawPause(ctx, state) {
   ctx.fillText('P / Esc / click — resume the night', 640, 188);
   const controls = [
     ['Move', 'WASD / arrow keys'],
-    ['Aim', 'Mouse'],
+    ['Aim', 'Mouse · R mirror · T rotate'],
     ['Flare', 'Click / Space'],
     ['Dash', 'Left / right Shift'],
     ['Dawn nova', 'Q / Space'],
@@ -747,7 +994,7 @@ function drawEnd(ctx, state, won) {
   ctx.textAlign = 'center';
   ctx.fillStyle = won ? '#ffd97a' : '#ff5d6c';
   ctx.font = '700 48px Georgia, serif';
-  ctx.fillText(won ? 'DAWN BREAKS' : 'THE LIGHT GOES OUT', 640, 116);
+  ctx.fillText(won ? (state.wave >= 30 ? 'THE SHATTERED DAWN' : 'DAWN BREAKS') : 'THE LIGHT GOES OUT', 640, 116);
   ctx.fillStyle = PALETTE.text;
   ctx.font = '600 20px Georgia, serif';
   ctx.fillText(won ? 'Three nights remembered in the lantern’s glow.'
@@ -806,7 +1053,7 @@ export function render(ctx, state) {
   }
   if (state.phase === 'title') {
     drawTitle(ctx, state, t);
-  } else if (state.phase === 'upgrade') {
+  } else if ((state.phase === 'upgrade' || state.phase === 'relic')) {
     drawUpgrade(ctx, state);
   } else if (state.phase === 'paused') {
     drawPause(ctx, state);

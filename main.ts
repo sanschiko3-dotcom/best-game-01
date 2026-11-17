@@ -1,10 +1,14 @@
-// LUMENWARDEN — main.ts
+// LUMENWARDEN v4 — "The Shattered Dawn" — main.ts
 // The program that hands the game in (Node 22, standard library only).
 // It copies this repository's game/ and screenshots/ beside it into
 // /output and writes /output/dossier.json, the summary the judge reads,
 // using the vendored make.fun library — exactly the shape the kit's
-// starter uses, written here for this game. Outside the grader,
-// MAKEFUN_OUTPUT_DIR stands in for /output:
+// starter uses, written here for this game. v4 adds the prism-mirror
+// beam system (game/src/prism.js), the four relics (game/src/relics.js),
+// Night 5 "The Shattered Dawn" with the Shattered Regent boss, two new
+// enemies (Webweaver, Fuelmite), and a deeper workshop — the campaign
+// now runs 30 waves over five nights before the endless deep.
+// Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
 //
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 //
@@ -19,10 +23,17 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Fail loudly instead of handing in an empty game: the one file the
-// gate requires outright is game/index.html.
+// Fail loudly instead of handing in an empty game: the files the
+// gate requires outright are game/index.html and the two v4 system
+// modules (prism mirrors and relics) — a v4 hand-in without them
+// would be a v3 game wearing a v4 title.
 if (!existsSync(join(here, 'game', 'index.html'))) {
-  throw new Error('LUMENWARDEN: game/index.html is missing — refusing to hand in an empty game');
+  throw new Error('LUMENWARDEN v4: game/index.html is missing — refusing to hand in an empty game');
+}
+for (const mod of ['game/src/prism.js', 'game/src/relics.js']) {
+  if (!existsSync(join(here, mod))) {
+    throw new Error(`LUMENWARDEN v4: ${mod} is missing — the v4 systems are not built`);
+  }
 }
 
 mkdirSync(out, { recursive: true });

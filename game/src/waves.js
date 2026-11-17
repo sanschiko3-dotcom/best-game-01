@@ -24,7 +24,7 @@ import { makeEnemy, makeBoss } from './entities.js';
 // — the crown returns every sixth wave for as long as the run lasts.
 export const BOSS_SCHEDULE = {
   every: 6,
-  names: ['The Gloam King', 'The Hollow Tide', 'The Gloam Queen', 'The Hollow King'],
+  names: ['The Gloam King', 'The Hollow Tide', 'The Gloam Queen', 'The Hollow King', 'The Shattered Regent'],
 };
 
 export function isBossWave(n) {
@@ -51,9 +51,9 @@ export function spawnGapFor(n) {
 // the endless deep (night 5+) keeps the same name with a rising number.
 export function waveTitle(n) {
   const night = Math.ceil(n / 6);
-  const nightName = night <= 3
-    ? NIGHT_THEMES[night - 1].name
-    : `The Hollow Dawn · Night ${night}`;
+  const nightName = night <= 5
+    ? (night===4 ? 'The Hollow Dawn · Night 4' : NIGHT_THEMES[night - 1].name)
+    : 'The Endless Night';
   const wave = n % 6 === 0 ? 'BOSS' : `WAVE ${(n - 1) % 6 + 1}/5`;
   const sub = (n === 5 || n === 10)
     ? 'Something huge moves in the dark…'

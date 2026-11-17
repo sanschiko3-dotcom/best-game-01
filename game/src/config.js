@@ -99,8 +99,8 @@ export const BRAZIER_HEAL = 2.5; // hp per second while standing in its light
 export const EMBER_FUEL = 12; // fuel restored by one ember
 export const EMBER_SCORE = 25;
 
-export const WAVES_TOTAL = 18; // survive wave 10 and dawn breaks: you win
-export const BOSS_WAVES = [6, 12, 18];
+export const WAVES_TOTAL = 30; // survive wave 10 and dawn breaks: you win
+export const BOSS_WAVES = [6, 12, 18, 24, 30];
 export const WAVE_CLEAR_BONUS = 150;
 export const COMBO_WINDOW = 3; // seconds; kills inside it raise the multiplier
 export const COMBO_MAX = 5;
@@ -137,10 +137,10 @@ Object.assign(ENEMIES, {
 // The night adjustments come from NIGHT_COMPS (config, single source of
 // truth) and the endless additions from endlessComp(); the mix is built
 // the same way for every wave, campaign or endless.
-export function waveComp(n, night = Math.min(3, Math.ceil(n / 6))) {
+export function waveComp(n, night = Math.min(5, Math.ceil(n / 6))) {
   const mix = baselineWaveComp(n);
   Object.assign(mix, endlessComp(n));
-  const adj = NIGHT_COMPS[Math.min(3, night)] || null;
+  const adj = NIGHT_COMPS[Math.min(5, night)] || null;
   if (adj) {
     for (const [type, delta] of Object.entries(adj)) {
       const floor = type === 'shade' ? 2 : 0;
@@ -190,6 +190,9 @@ export const NIGHT_THEMES = [
     sub: 'The crown breaks. Keep moving.',
   },
   {
+    name: 'The Shattered Dawn', skyTop: '#382343', skyBottom: '#20132c', ground: '#32233b', groundLine: '#73525b', moon: '#ffe39b', moonGlow: 'rgba(255,210,120,.6)', fog: 'rgba(210,160,255,.2)', sub: 'Reflect the shattered sun.',
+  },
+  {
     name: 'The Endless Night', skyTop: '#160a24', skyBottom: '#0a0616',
     ground: '#180f28', groundLine: '#241736', moon: '#e6d4ff',
     moonGlow: 'rgba(230,212,255,0.5)', fog: 'rgba(210,180,245,0.28)',
@@ -204,12 +207,13 @@ export function themeForNight(night) {
 
 // Boss names and taunts, one per night. Night 4+ is the Hollow King;
 // beyond that the crown only grows heavier, the name stays.
-export const BOSS_NAMES = ['The Gloam King', 'The Hollow Tide', 'The Gloam Queen', 'The Hollow King'];
+export const BOSS_NAMES = ['The Gloam King', 'The Hollow Tide', 'The Gloam Queen', 'The Hollow King', 'The Shattered Regent'];
 export const BOSS_SUBS = [
   'Break his crown of dark',
   'Drown the tide in light',
   'Break her crown of dark',
   'Break the hollow crown',
+  'Shatter the broken crown',
 ];
 
 export function bossNameForNight(night) {
@@ -253,7 +257,7 @@ export const BRAZIER_TYPES = {
 
 export function brazierStats(kind, level) {
   const t = BRAZIER_TYPES[kind] || BRAZIER_TYPES.Ember;
-  const lv = Math.max(1, Math.min(3, level || 1));
+  const lv = Math.max(1, Math.min(5, level || 1));
   const extra = lv - 1;
   return {
     kind, level: lv,
@@ -279,12 +283,12 @@ export const BEACON_DEFS = [
 // number is what endlessScale() and the wave composer both read, so the
 // difficulty curve is declared once and honoured everywhere.
 export const ENDLESS_TABLE = [
-  { block: 0, waves: '25-30', hpMul: 1.09, speedMul: 1.02, eliteBonus: 0.01, hollowBonus: 0, mirrorBonus: 0 },
-  { block: 1, waves: '31-36', hpMul: 1.63, speedMul: 1.09, eliteBonus: 0.08, hollowBonus: 6, mirrorBonus: 1 },
-  { block: 2, waves: '37-42', hpMul: 2.17, speedMul: 1.18, eliteBonus: 0.14, hollowBonus: 12, mirrorBonus: 2 },
-  { block: 3, waves: '43-48', hpMul: 2.71, speedMul: 1.26, eliteBonus: 0.21, hollowBonus: 18, mirrorBonus: 3 },
-  { block: 4, waves: '49-54', hpMul: 3.25, speedMul: 1.35, eliteBonus: 0.27, hollowBonus: 24, mirrorBonus: 4 },
-  { block: 5, waves: '55+', hpMul: 3.79, speedMul: 1.44, eliteBonus: 0.34, hollowBonus: 30, mirrorBonus: 5 },
+  { block: 0, waves: '25-30', hpMul: 1.09, speedMul: 1.02, eliteBonus: 0.01, hollowBonus: 0, mirrorBonus: 0, webBonus: 0, fuelBonus: 0 },
+  { block: 1, waves: '31-36', hpMul: 1.63, speedMul: 1.09, eliteBonus: 0.08, hollowBonus: 6, mirrorBonus: 1, webBonus: 2, fuelBonus: 3 },
+  { block: 2, waves: '37-42', hpMul: 2.17, speedMul: 1.18, eliteBonus: 0.14, hollowBonus: 12, mirrorBonus: 2, webBonus: 4, fuelBonus: 6 },
+  { block: 3, waves: '43-48', hpMul: 2.71, speedMul: 1.26, eliteBonus: 0.21, hollowBonus: 18, mirrorBonus: 3, webBonus: 6, fuelBonus: 9 },
+  { block: 4, waves: '49-54', hpMul: 3.25, speedMul: 1.35, eliteBonus: 0.27, hollowBonus: 24, mirrorBonus: 4, webBonus: 8, fuelBonus: 12 },
+  { block: 5, waves: '55+', hpMul: 3.79, speedMul: 1.44, eliteBonus: 0.34, hollowBonus: 30, mirrorBonus: 5, webBonus: 10, fuelBonus: 15 },
 ];
 
 export function endlessBlock(n) {
@@ -299,6 +303,8 @@ export function endlessBlock(n) {
 // stalkers, siphons and splitters. Shade never drops below 2, so the
 // arena is never empty of its basic shadow.
 export const NIGHT_COMPS = {
+  4: { stalker: 5, siphon: 4, splitter: 4, webweaver: 1 },
+  5: { hulk: 4, spitter: 4, siphon: 5, webweaver: 2, fuelmite: 3 },
   2: { wisp: 5, spitter: 3, shade: -4 },
   3: { stalker: 4, siphon: 3, splitter: 3 },
 };
@@ -309,11 +315,38 @@ export const NIGHT_COMPS = {
 // pair every six waves. Counts only ever grow — the night never relents.
 export function endlessComp(n) {
   const out = {};
+  if(n>=19) out.webweaver=2+Math.floor((n-19)/6);
+  if(n>=25) out.fuelmite=4+Math.floor((n-25)/3);
   if (Math.ceil(n / 6) >= 5) out.hollow = 8 + (n - 25) * 2;
   if (n >= 19) {
     const pair = 2 + Math.floor((n - 19) / 6);
     out.mirror = pair;
     out.thief = pair;
   }
+  if (n >= 31) {
+    const row = endlessBlock(n);
+    out.webweaver += row.webBonus;
+    out.fuelmite += row.fuelBonus;
+  }
   return out;
 }
+
+Object.assign(ENEMIES,{webweaver:{name:'Webweaver',hp:42,speed:62,radius:14,score:180,damage:7,colour:'#d4c9ed',emberChance:.7,ranged:true,shootRange:350,shootCooldown:4,boltSpeed:150},fuelmite:{name:'Fuelmite',hp:18,speed:185,radius:10,score:90,damage:14,colour:'#ffe278',emberChance:.4,ranged:false,shootRange:0,shootCooldown:0,boltSpeed:0}});
+
+export const BEAM = {
+  length: 520,
+  width: 26,
+  baseDps: 30,
+  mirrorHp: 40,
+  baseBounces: 1,
+  lengthPerPivot: 80,
+  dpsPerGlass: 0.40,
+  emberheartMul: 1.6,
+};
+
+export const MIRROR_SHOP_TIERS = {
+  rack: { costs: [15, 25], maxLevel: 2 },
+  glass: { costs: [12, 12, 12], maxLevel: 3 },
+  pivot: { costs: [10, 10], maxLevel: 2 },
+  cache: { cost: 30 },
+};

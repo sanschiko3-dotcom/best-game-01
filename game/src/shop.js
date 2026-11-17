@@ -2,8 +2,9 @@
 // LUMENWARDEN — shop.js
 // One job: dawn purchases, their effects, and the shop panel.
 
+import { RELICS, pickRelic } from './relics.js';
 import { sfx } from './audio.js';
-import { VIEW, BRAZIER_TYPES, brazierStats } from './config.js';
+import { MIRROR_SHOP_TIERS, VIEW, BRAZIER_TYPES, brazierStats } from './config.js';
 
 export const SHOP = [
   {
@@ -64,11 +65,21 @@ export const SHOP = [
   },
 ];
 
+SHOP.push(
+{tier:'rack',field:'mirrorRack',name:'Mirror Rack',desc:'+1 mirror (two tiers)',cost:15,apply(p){p.mirrorRack=(p.mirrorRack||0)+1;}},
+{tier:'glass',field:'glass',name:'Polished Glass',desc:'+40% beam DPS (three tiers)',cost:12,apply(p){p.glass=(p.glass||0)+1;}},
+{tier:'pivot',field:'pivot',name:'Quick Pivot',desc:'+80 beam length (two tiers)',cost:10,apply(p){p.pivot=(p.pivot||0)+1;}},
+{name:'Relic Cache',desc:'Random unowned relic',cost:MIRROR_SHOP_TIERS.cache.cost,once:'cache',apply(p,s){const r=s.rng.pick(RELICS.filter(r=>!s.relics.includes(r.id)));if(r)pickRelic(s,r.id);p.cache=true;}});
 export function buy(state, index) {
   const item = SHOP[index];
-  if (!item || state.currency < item.cost) return false;
+  if (!item) return false;
+  const tier = MIRROR_SHOP_TIERS[item.tier];
+  const level = state.player[item.field] || 0;
+  if (tier && level >= tier.maxLevel) return false;
+  const cost = tier ? tier.costs[level] : item.cost;
+  if (state.currency < cost) return false;
   if (item.once && state.player[item.once]) return false;
-  state.currency -= item.cost;
+  state.currency -= cost;
   item.apply(state.player, state);
   sfx.shopBuy();
   return true;
@@ -85,17 +96,23 @@ export function drawShop(ctx, state) {
   ctx.fillText(`${state.currency} embers · Prepare for the next night`, 640, 135);
   SHOP.forEach((item, index) => {
     const x = 70 + (index % 2) * 580;
-    const y = 160 + Math.floor(index / 2) * 94;
-    const owned = item.once && state.player[item.once];
+    const y = 160 + Math.floor(index / 2) * 62;
+    const tier = MIRROR_SHOP_TIERS[item.tier];
+    const level = state.player[item.field] || 0;
+    const pips = tier ? '●'.repeat(level) + '○'.repeat(tier.maxLevel - level) : '';
+    const cost = tier ? tier.costs[level] : item.cost;
+    const owned = (item.once && state.player[item.once]) || (tier && level >= tier.maxLevel);
     ctx.strokeStyle = owned ? '#789980' : '#a38350';
-    ctx.strokeRect(x, y, 550, 82);
+    ctx.strokeRect(x, y, 550, 58);
     ctx.fillStyle = '#ffe5b0';
     ctx.font = 'bold 22px Georgia';
-    const key = (index + 1) % 10;
-    ctx.fillText(`${key}. ${item.name} · ${owned ? 'OWNED' : item.cost + ' embers'}`, x + 275, y + 29);
+    const key = index<10?(index+1)%10:['J','K','L','C'][index-10];
+    ctx.fillText(`${key}. ${item.name} · ${owned ? 'OWNED' : cost + ' embers'}`, x + 275, y + 29);
     ctx.font = '17px Georgia';
-    ctx.fillText(item.desc, x + 275, y + 59);
+    ctx.fillText(`${pips} ${item.desc}`, x + 275, y + 49);
   });
+  ctx.font = '16px Georgia';
+  if (state.lastRelicGain) ctx.fillText('Cache recovered: ' + state.lastRelicGain, 640, 610);
   drawBrazierSection(ctx, state);
   ctx.font = '22px Georgia';
   ctx.fillText('ENTER — Set out into the next night', 640, 712);

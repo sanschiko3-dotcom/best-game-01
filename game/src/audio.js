@@ -78,7 +78,42 @@ function noise(dur, vol = 0.15, filterFreq = 1200, delay = 0) {
   } catch { /* sound is never worth a crash */ }
 }
 
+let lastBeamHum = -Infinity;
+
 export const sfx = {
+  mirrorPlace() {
+    tone(880, 0.14, 'triangle', 0.12, 1320);
+    tone(1760, 0.2, 'sine', 0.06, 2200, 0.06);
+  },
+  mirrorBreak() {
+    noise(0.2, 0.12, 2800);
+    tone(1200, 0.18, 'triangle', 0.1, 240);
+  },
+  relicGrant() {
+    [330, 494, 659].forEach((f, i) =>
+      tone(f, 0.5, 'sine', 0.12, null, i * 0.12));
+  },
+  relicPick() {
+    [659, 880, 1318].forEach((f, i) =>
+      tone(f, 0.3, 'triangle', 0.12, null, i * 0.08));
+  },
+  regentRoar() {
+    tone(73, 0.9, 'sawtooth', 0.2, 36);
+    noise(0.7, 0.12, 600);
+  },
+  webLay() {
+    noise(0.16, 0.05, 1800);
+    tone(320, 0.2, 'sine', 0.06, 160);
+  },
+  fuelmiteFuse() {
+    tone(1400, 0.08, 'square', 0.05, 1800);
+    noise(0.15, 0.04, 2200);
+  },
+  beamHum(time) {
+    if (time - lastBeamHum < 0.5) return;
+    lastBeamHum = time;
+    tone(110, 0.18, 'sine', 0.025, 112);
+  },
   dash() { noise(0.22, 0.18, 3500); tone(440, 0.18, 'sine', 0.1, 110); },
   nova() { noise(0.9, 0.3, 2200); tone(70, 0.8, 'triangle', 0.3, 25); },
   enrage() { tone(120, 0.6, 'sawtooth', 0.25, 45); tone(155, 0.5, 'square', 0.12); },

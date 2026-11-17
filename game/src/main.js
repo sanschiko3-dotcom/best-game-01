@@ -1,4 +1,9 @@
+import { BEAM, NIGHT_COMPS } from './config.js';
+import { beamLength, traceBeam, updateWebs } from './prism.js';
 // SPDX-License-Identifier: MIT
+import { updatePrism, placeMirror, rotateMirror, beamDps, capacity } from './prism.js';
+import { grantRelic, pickRelic } from './relics.js';
+import { setEntityRng } from './entities.js';
 // LUMENWARDEN — main.js
 // One job: the game's state machine and loop.
 // Phases: title → playing → (upgrade between waves) → playing …
@@ -109,6 +114,7 @@ function startWave(n) {
 }
 
 function startRun() {
+  state.mirrors=[];state.webs=[];state.relics=[];state.companion=null;state.wispTimer=0;setEntityRng(state.rng);
   state.beacons = undefined;
   state.stats = makeRunStats();
   state.bestCombo = 0;
@@ -140,13 +146,14 @@ function startRun() {
 }
 
 function openUpgrade() {
-  if(state.wave%6===0 && state.wave!==18) { state.phase='shop'; return; }
+  if(state.wave%6===0){if(grantRelic(state))return;if(state.wave>=WAVES_TOTAL&&!state.endless){endRun(true);return;}state.phase='shop';return;}
   state.choices = rollChoices(state.rng, state.takenUpgrades, 3);
   state.phase = 'upgrade';
   sfx.upgrade();
 }
 
 function pickUpgrade(i) {
+  if(state.phase==='relic'){pickRelic(state,state.choices[i].id);if(state.wave>=WAVES_TOTAL&&!state.endless)endRun(true);else state.phase='shop';return;}
   const u = state.choices[i];
   if (!u) return;
   u.apply(state.player);
@@ -221,6 +228,8 @@ function updatePlaying(dt) {
   state.redFlash = Math.max(0, (state.redFlash || 0) - dt);
   updatePlayer(state.player, input, dt, state);
   updateWave(state.waveObj, state.enemies, state.player, dt, state, state.rng);
+  if(input.pressed('KeyR'))placeMirror(state);if(input.pressed('KeyT'))rotateMirror(state);
+  updatePrism(state,dt);
   updateEnemies(state.enemies, state.player, dt, state);
   updateFlares(state.flares, state.enemies, dt, state);
   updateBolts(state.bolts, state.player, dt, state);
@@ -305,11 +314,13 @@ function frame(now) {
   if (state.phase === 'title') updateTitle(dt);
   else if (state.phase === 'playing') updatePlaying(dt);
   else if (state.phase === 'shop') {
+    ['KeyJ','KeyK','KeyL','KeyC'].forEach((key,i)=>{if(input.pressed(key))buy(state,10+i);});
     for(let i=0;i<3;i++) if(input.pressed(['KeyB','KeyF','KeyS'][i])) buyBrazier(state,['Ember','Frost','Sun'][i]);
     if(input.pressed('KeyU')) upgradeBrazier(state);
     for(let i=0;i<10;i++) if(input.pressed('Digit'+((i+1)%10))) buy(state,i);
     if(input.pressed('Enter')) { startWave(state.wave+1); state.phase='playing'; state.player.fuel=state.player.maxFuel; }
   }
+  else if(state.phase==='relic'){for(let i=0;i<2;i++)if(input.pressed('Digit'+(i+1)) || (input.mouse.clicked&&input.mouse.x>160+i*330&&input.mouse.x<460+i*330&&input.mouse.y>250&&input.mouse.y<490)){pickRelic(state,state.choices[i]?.id);if(state.wave>=WAVES_TOTAL&&!state.endless)endRun(true);else state.phase='shop';break;}}
   else if (state.phase === 'upgrade') updateUpgrade(dt);
   else if (state.phase === 'paused') {
     if (input.pressed('KeyP') || input.pressed('Escape') || input.mouse.clicked) state.phase = 'playing';
@@ -401,6 +412,7 @@ export function runSelfTest() {
       // Light burn alone also kills: stand the burn test by letting the
       // lantern do its work while flares fly.
       updateWave(state.waveObj, state.enemies, p, dt, state, state.rng);
+      updatePrism(state,dt);
       updateEnemies(state.enemies, p, dt, state);
       updateFlares(state.flares, state.enemies, dt, state);
       updateBolts(state.bolts, p, dt, state);
@@ -435,7 +447,7 @@ export function runSelfTest() {
     done('pause_render');
     // 2) Upgrade choice applies.
     if (state.phase === 'upgrade') {
-      const snap = (p) => [p.lightRadius, p.flareDamage, p.speedMul, p.fuelDrainMul, p.pickupMul, p.burnDps, p.twinFlare, p.hp, p.fuel].join('|');
+      const snap = (p) => [p.lightRadius, p.flareDamage, p.speedMul, p.fuelDrainMul, p.pickupMul, p.burnDps, p.twinFlare, p.hp, p.fuel, p.prismShard, p.beamMul].join('|');
       const before = snap(state.player);
       const nChoices = state.choices.length;
       pickUpgrade(0);
@@ -489,7 +501,7 @@ export function runSelfTest() {
     const target=makeEnemy('hulk',400,400,1); state.enemies=[target]; p.nova=100;
     const hp=target.hp; nova(p,state);
     out.checks.nova=target.hp<hp && state.braziers.every(b=>b.lit);
-    state.wave=6; openUpgrade(); state.currency=30;
+    state.wave=6; openUpgrade(); pickUpgrade(0); state.currency=30;
     const before=p.maxHp; buy(state,0);
     out.checks.shop=state.phase==='shop' && p.maxHp>before;
     startWave(7); state.phase='playing';
@@ -561,7 +573,7 @@ export function runSelfTest() {
     // v3 tables: one night one palette, one brazier table, one endless
     // composer — the self-test pins the tables to the live formulas so
     // a tuning edit that drifts from the code fails loudly here.
-    out.checks.night_theme = themeForNight(4).skyTop === '#211531' && themeForNight(1).name === 'Ember Fields' && themeForNight(5).name === 'The Endless Night';
+    out.checks.night_theme = themeForNight(4).skyTop === '#211531' && themeForNight(1).name === 'Ember Fields' && themeForNight(6).name === 'The Endless Night';
     out.checks.brazier_table = brazierStats('Sun', 2).radius === 190 && Math.round(brazierStats('Frost', 3).dps) === 22 && brazierStats('Ember', 1).dps === 26;
     out.checks.endless_comp = endlessComp(31).hollow === 20 && endlessComp(31).mirror === 4 && endlessComp(25).hollow === 8;
     const wt = waveTitle(19);
@@ -590,7 +602,71 @@ export function runSelfTest() {
     done('endless_stats_render');
     render(ctx,state);
     done('hollow_render');
-    out.ok = Object.values(out.checks).every((v) => v === true || (typeof v === 'number' && v >= 0));
+    startRun();const v4p=state.player;v4p.x=100;v4p.y=100;v4p.aim=0;
+    out.checks.prism_place=placeMirror(state)&&state.mirrors.length===1;
+    const angle=state.mirrors[0].angle;rotateMirror(state);out.checks.prism_rotate=state.mirrors[0].angle!==angle;
+    state.mirrors=[];let testEnemy=makeEnemy('hulk',250,100,1);state.enemies=[testEnemy];let oldHp=testEnemy.hp;updatePrism(state,.1);out.checks.prism_beam_damage=testEnemy.hp<oldHp;
+    state.mirrors=[{x:200,y:100,angle:Math.PI/4,hp:40}];testEnemy.x=200;testEnemy.y=250;oldHp=testEnemy.hp;updatePrism(state,.1);out.checks.prism_bounce=testEnemy.hp<oldHp;
+    testEnemy.x=200;testEnemy.y=100;updatePrism(state,.01);out.checks.prism_smash=state.mirrors.length===0;
+    grantRelic(state);out.checks.relic_grant=state.choices.length===2;pickRelic(state,state.choices[0].id);out.checks.relic_grant&&=state.relics.length===1;
+    state.relics=[];let power=beamDps(state);pickRelic(state,'emberheart');out.checks.relic_emberheart=beamDps(state)>power;
+    let cap=capacity(state);pickRelic(state,'moonshard');out.checks.relic_moonshard=capacity(state)===cap+1;
+    pickRelic(state,'wisp');state.enemies=[makeEnemy('hulk',500,500,1)];updatePrism(state,1.7);out.checks.relic_wisp=state.wispShots>0;
+    pickRelic(state,'fang');v4p.fuel=30;state.enemies[0].hp=0;reapDead(state.enemies,state.embers,state.particles,state.floats,state,state.rng);out.checks.relic_fang=v4p.fuel===33;
+    const web=makeEnemy('webweaver',100,100,1);web.webTimer=0;state.enemies=[web];updatePrism(state,.1);out.checks.webweaver_snare=state.webs.length===1&&v4p.webSlow>0;
+    const mite=makeEnemy('fuelmite',100,100,1);state.enemies=[mite];let fuel=v4p.fuel;oldHp=v4p.hp;updatePrism(state,.6);out.checks.fuelmite_explode=mite.hp<=0&&v4p.hp<oldHp&&v4p.fuel<fuel;
+    const regent=makeBoss(100,100,30);state.enemies=[regent];out.checks.regent_spawn=regent.name==='The Shattered Regent';regent.pulse=0;placeMirror(state);updatePrism(state,.01);out.checks.regent_pulse=state.mirrors.length===0;
+    regent.sweep=0;regent.sweepAngle=0;v4p.x=200;v4p.y=100;updatePrism(state,.4);const warning=regent.sweepTime>0;oldHp=v4p.hp;regent.sweepAngle=-.65*.5;updatePrism(state,.5);out.checks.regent_sweep=warning&&v4p.hp<oldHp;
+    out.checks.night5_theme=themeForNight(5).name==='The Shattered Dawn';out.checks.night5_comp=waveComp(25).webweaver>0&&waveComp(25).fuelmite>0;
+    state.currency=100;cap=capacity(state);buy(state,10);out.checks.shop_mirror=capacity(state)===cap+1;power=beamDps(state);buy(state,11);out.checks.shop_glass=beamDps(state)>power;
+    state.wave=30;state.relics=[];openUpgrade();pickUpgrade(0);out.checks.victory30=state.phase==='victory';state.endless=true;startWave(31);out.checks.endless_after30=state.wave===31;
+    // Independent contracts for data, purchases, geometry and reward flow.
+    startRun();
+    const testPlayer = state.player;
+    out.checks.beam_config = BEAM.baseDps === 30;
+    out.checks.night5_named = NIGHT_COMPS[5].webweaver > 0 && NIGHT_COMPS[5].fuelmite > 0;
+    out.checks.endless_growth = endlessComp(37).webweaver > endlessComp(31).webweaver;
+    state.currency = 1000;
+    const initialCapacity = capacity(state);
+    buy(state, 10);
+    buy(state, 10);
+    out.checks.rack_capacity = capacity(state) === initialCapacity + 2;
+    out.checks.rack_limit = !buy(state, 10);
+    for (let i = 0; i < 3; i++) buy(state, 11);
+    out.checks.glass_limit = testPlayer.glass === 3 && !buy(state, 11);
+    const initialLength = beamLength(state);
+    buy(state, 12);
+    buy(state, 12);
+    out.checks.pivot_length = beamLength(state) === initialLength + 160;
+    out.checks.pivot_limit = !buy(state, 12);
+    buy(state, 13);
+    out.checks.cache_relic = state.relics.length === 1 && !!state.lastRelicGain;
+    out.checks.relic_stat = state.stats.relicsTaken === 1;
+    const pool = rollChoices(state.rng, new Set(), 99);
+    const focus = pool.find(u => u.id === 'shatteredFocus');
+    const beforeLength = beamLength(state);
+    focus.apply(testPlayer);
+    out.checks.shattered_focus = beamLength(state) === beforeLength + 40;
+    pool.find(u => u.id === 'prism').apply(testPlayer);
+    out.checks.prism_capacity = capacity(state) === initialCapacity + 3 + (state.relics.includes('moonshard') ? 1 : 0);
+    state.webs = [{x: 0, y: 0, life: 6}];
+    state.enemies = [];
+    updateWebs(state, 6.1);
+    out.checks.web_expiry = state.webs.length === 0;
+    placeMirror(state);
+    out.checks.mirror_stat = state.stats.mirrorsPlaced === 1;
+    drawShop(ctx, state);
+    out.checks.shop_fourteen_render = SHOP.length === 14;
+    state.relics = [];
+    state.wave = 6;
+    openUpgrade();
+    out.checks.boss_relic_phase = state.phase === 'relic' && state.choices.length === 2;
+    pickUpgrade(0);
+    out.checks.relic_returns_shop = state.phase === 'shop';
+    applyShot(state, 'upgrade', 1, {startRun, openUpgrade});
+    render(ctx, state);
+    out.checks.relic_shot = state.phase === 'relic' && state.choices.length === 2;
+    out.ok = Object.values(out.checks).every((v4p) => v4p === true || (typeof v4p === 'number' && v4p >= 0));
   } catch (err) {
     out.errors.push(String(err && err.stack || err));
     out.ok = false;

@@ -10,6 +10,11 @@ import {
   BRAZIER_BURN_DPS, BRAZIER_HEAL, EMBER_FUEL, EMBER_SCORE, COMBO_WINDOW,
   bossNameForNight, brazierStats,
 } from './config.js';
+import { breakAllMirrors, lineDistance } from './prism.js';
+import { relicBonus } from './relics.js';
+import { makeRng } from './random.js';
+let entityRng=makeRng(73);
+export function setEntityRng(rng){entityRng=rng;}
 import { sfx } from './audio.js';
 import { endlessScale } from './config.js';
 import { startHollow, updateHollow, brazierDps } from './hollow.js';
@@ -42,10 +47,10 @@ export function makeEnemy(type, x, y, wave, elite = false) {
     id: ++enemyId, elite, type, x, y, def,
     hp: def.hp * scale.hp * (elite ? 3 : 1),
     maxHp: def.hp * scale.hp * (elite ? 3 : 1),
-    speed: def.speed * scale.speed * (0.9 + Math.random() * 0.2),
+    speed: def.speed * scale.speed * (0.9 + entityRng.next() * 0.2),
     radius: def.radius * (elite ? 1.18 : 1), damage: def.damage,
-    vx: 0, vy: 0, wobble: Math.random() * Math.PI * 2,
-    shootTimer: 1 + Math.random() * 1.5, hitFlash: 0, burnTick: 0,
+    vx: 0, vy: 0, wobble: entityRng.next() * Math.PI * 2,
+    shootTimer: 1 + entityRng.next() * 1.5, hitFlash: 0, burnTick: 0,
     boss: false,
   };
 }
@@ -58,6 +63,15 @@ export function makeBoss(x, y, wave) {
   e.type = 'boss';
   e.hp = BOSS.hp * (wave >= 10 ? 1.35 : 1);
   e.hp *= 1 + Math.max(0,e.night-3)*0.65;
+  if (wave >= 30) {
+    e.name = 'The Shattered Regent';
+    e.pulse = 12;
+    sfx.regentRoar();
+    e.shards = 8;
+    e.sweep = 4;
+    e.sweepTime = 0;
+    e.sweepWarn = 0;
+  }
   e.maxHp = e.hp;
   e.speed = BOSS.speed;
   e.radius = BOSS.radius;
@@ -77,12 +91,12 @@ export function spawnEmber(list, x, y, rng) {
 
 export function spawnBurst(list, x, y, colour, n, speed = 160) {
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const s = speed * (0.3 + Math.random() * 0.7);
+    const a = entityRng.next() * Math.PI * 2;
+    const s = speed * (0.3 + entityRng.next() * 0.7);
     list.push({
       x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      life: 0.4 + Math.random() * 0.45, maxLife: 0.85,
-      size: 2 + Math.random() * 3.5, colour,
+      life: 0.4 + entityRng.next() * 0.45, maxLife: 0.85,
+      size: 2 + entityRng.next() * 3.5, colour,
     });
   }
 }
@@ -101,13 +115,13 @@ export function updatePlayer(p, input, dt, state) {
   p.vy += mv.y * PLAYER.accel * dt;
   const fr = Math.exp(-PLAYER.friction * dt);
   p.vx *= fr; p.vy *= fr;
-  const max = PLAYER.speed * p.speedMul * (p.dashTime > 0 ? 3.8 : 1);
+  const max = PLAYER.speed * p.speedMul * ((p.webSlow>0 || (state.webs||[]).some(w=>Math.hypot(w.x-p.x,w.y-p.y)<70))?.55:1) * (p.dashTime > 0 ? 3.8 : 1);
   const sp = Math.hypot(p.vx, p.vy);
   if (sp > max) { p.vx = (p.vx / sp) * max; p.vy = (p.vy / sp) * max; }
   p.x = Math.max(28, Math.min(VIEW.w - 28, p.x + p.vx * dt));
   p.y = Math.max(28, Math.min(VIEW.h - 28, p.y + p.vy * dt));
   p.walkPhase += sp * dt * 0.05;
-  if(sp>30 && Math.random()<dt*22) spawnBurst(state.particles,p.x,p.y,'#ff9a3d',1,25);
+  if(sp>30 && entityRng.next()<dt*22) spawnBurst(state.particles,p.x,p.y,'#ff9a3d',1,25);
 
   // Aim at the mouse; the lantern points where the player looks.
   p.aim = Math.atan2(input.mouse.y - p.y, input.mouse.x - p.x);
@@ -226,7 +240,7 @@ export function updateEnemies(list, p, dt, state) {
       if (e.summonTimer <= 0) {
         e.summonTimer = BOSS.summonEvery;
         for (let i = 0; i < 3; i++) {
-          const a = Math.random() * Math.PI * 2;
+          const a = entityRng.next() * Math.PI * 2;
           list.push(makeEnemy('shade', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60, state.wave));
         }
         spawnBurst(state.particles, e.x, e.y, '#ff4d6d', 18, 200);
@@ -267,7 +281,7 @@ export function updateEnemies(list, p, dt, state) {
     }
     if (inLantern || inBrazier) {
       const dps = inBrazier ? Math.max(p.burnDps, ...state.braziers.filter(b=>b.lit && dist(e.x,e.y,b.x,b.y)<b.radius).map(b=>brazierDps(b,state))) : p.burnDps;
-      applyDamage(e, dps * dt, state);
+      applyDamage(e, dps * dt * relicBonus(state, 'burnMul'), state);
       e.burnTick += dt;
       if (e.burnTick > 0.25) {
         e.burnTick = 0;
@@ -343,6 +357,7 @@ export function updateBolts(list, p, dt, state) {
       continue;
     }
     if (dist(b.x, b.y, p.x, p.y) < b.radius + p.radius && p.grace <= 0 && !p.dead) {
+      if (b.webSlow) p.webSlow = b.webSlow;
       p.hp -= b.damage;
       p.grace = PLAYER.contactGrace;
       sfx.hurt();
@@ -411,6 +426,8 @@ export function reapDead(enemies, embers, particles, floats, state, rng) {
     state.player.nova=Math.min(100,state.player.nova+(4+state.multiplier)*state.player.novaGain);
     state.stats.killsByType[e.type] = (state.stats.killsByType[e.type] || 0) + 1;
     state.kills += 1;
+    state.player.fuel = Math.min(state.player.maxFuel,
+      state.player.fuel + relicBonus(state, 'fuelOnKill'));
     state.comboTimer = COMBO_WINDOW;
     state.combo += 1;
     state.bestCombo = Math.max(state.bestCombo, state.combo);
@@ -587,8 +604,8 @@ function updateEnvironment(state, dt) {
     boss.teleportTimer -= dt;
     if (boss.teleportTimer > 0) continue;
     spawnBurst(state.particles, boss.x, boss.y, '#c86bff', 24);
-    boss.x = 100 + Math.random() * (VIEW.w - 200);
-    boss.y = 100 + Math.random() * (VIEW.h - 200);
+    boss.x = 100 + entityRng.next() * (VIEW.w - 200);
+    boss.y = 100 + entityRng.next() * (VIEW.h - 200);
     boss.teleportsLeft--;
     boss.teleportTimer = 0.3;
     for (let i = 0; i < 2; i++) {
@@ -598,8 +615,85 @@ function updateEnvironment(state, dt) {
 }
 
 // Count effective damage, excluding overkill and already fallen shadows.
-function applyDamage(enemy, amount, state) {
+export function applyDamage(enemy, amount, state) {
   state.stats.damageDealt += Math.min(Math.max(0, enemy.hp), amount);
   enemy.hp -= amount;
   if(enemy.boss && amount>1) state.shake=Math.max(state.shake,5);
+}
+
+// Prism enemies keep their clocks on the entity, independently of movement.
+export function webweaverLayWeb(e, state, dt) {
+  const p = state.player;
+  e.webTimer = (e.webTimer ?? 4) - dt;
+  if (e.webTimer <= 0) {
+    state.webs.push({ x: p.x, y: p.y, life: 6 });
+    e.webTimer = 4;
+  }
+  if (Math.hypot(e.x - p.x, e.y - p.y) < 70) p.webSlow = 2;
+  e.webShotTimer = (e.webShotTimer ?? 2) - dt;
+  if (e.webShotTimer > 0) return;
+  const angle = Math.atan2(p.y - e.y, p.x - e.x);
+  state.bolts ||= [];
+  state.bolts.push({
+    x: e.x,
+    y: e.y,
+    vx: Math.cos(angle) * 220,
+    vy: Math.sin(angle) * 220,
+    radius: 7,
+    damage: 0,
+    webSlow: 2,
+    life: 4,
+  });
+  e.webShotTimer = 2;
+}
+
+export function fuelmiteFuse(e, state, dt) {
+  const p = state.player;
+  const distance = Math.hypot(e.x - p.x, e.y - p.y);
+  if (distance >= 26 && e.fuse === undefined) return;
+  if (e.fuse === undefined) sfx.fuelmiteFuse();
+  e.fuse = (e.fuse ?? 0.5) - dt;
+  e.flash = 0.5 + 0.5 * Math.cos(e.fuse * 40);
+  if (e.fuse > 0) return;
+  if (distance < 70) {
+    p.hp -= 14;
+    p.fuel = Math.max(0, p.fuel - 12);
+  }
+  e.hp = 0;
+  spawnBurst(state.particles, e.x, e.y, '#ffe278', 20);
+}
+
+export function regentAttacks(e, state, dt) {
+  const p = state.player;
+  e.pulse = (e.pulse ?? 12) - dt;
+  e.shards = (e.shards ?? 8) - dt;
+  e.sweep = (e.sweep ?? 4) - dt;
+  if (e.pulse <= 0) {
+    breakAllMirrors(state);
+    e.pulse = 12;
+  }
+  if (e.shards <= 0) {
+    const types = ['fuelmite', 'fuelmite', 'webweaver'];
+    for (const [i, type] of types.entries()) {
+      state.enemies.push(makeEnemy(type, e.x + 50 * i, e.y + 60, state.wave));
+    }
+    e.shards = 8;
+  }
+  if (e.sweep > 0) return;
+  e.sweepTime = (e.sweepTime || 0) + dt;
+  e.sweepWarn = Math.max(0, 0.8 - e.sweepTime);
+  e.sweepAngle = (e.sweepAngle ?? Math.atan2(p.y - e.y, p.x - e.x)) + dt * 0.65;
+  const end = {
+    x: e.x + Math.cos(e.sweepAngle) * 1100,
+    y: e.y + Math.sin(e.sweepAngle) * 1100,
+  };
+  if (e.sweepTime > 0.8 && lineDistance(p, e, end) < 26) {
+    p.hp -= 22 * dt;
+  }
+  if (e.sweepTime > 3) {
+    e.sweep = 5;
+    e.sweepTime = 0;
+    e.sweepWarn = 0;
+    e.sweepAngle = undefined;
+  }
 }
